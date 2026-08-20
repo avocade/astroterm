@@ -142,7 +142,17 @@ if is_windows
         link_args: ['-L' + deps_lib_path, '-lpdcurses']
     )
 else
-    curses = dependency('curses', required : true)
+    # Prefer ncursesw (wide character support)
+    # https://mesonbuild.com/Dependencies.html#curses
+    # Explicitly asking for ncursesw should give us ncursesw.pc - which should
+    # provide the correct include and link flags. Issue #115.
+    curses = dependency('ncursesw', required: false)
+    if not curses.found()
+        curses = dependency('ncurses', required: false)
+    endif
+    if not curses.found()
+        curses = dependency('curses', required: true)
+    endif
 endif
 
 # Define some curses preprocessor symbols
@@ -165,7 +175,7 @@ if curses.found()
 endif
 
 # Check what curses headers are available
-if (conf.get('HAVE_NCURSESW_H', 0) == 1)
+if (conf.get('HAVE_NCURSESW_H', 0) == 1 or conf.get('HAVE_NCURSESW_CURSES_H', 0) == 1)
     # Have ncurses with wide char support
 else
     if (conf.get('HAVE_NCURSES_H', 0) == 1)
