@@ -209,14 +209,10 @@ void test_horizontal_ascii_11x11(void)
 
 void read_window_to_wide_array(WINDOW *win, wchar_t array[MAX_WINDOW_HEIGHT][MAX_WINDOW_WIDTH], int height, int width)
 {
-    chtype wc;
-
     for (int y = 0; y < height; y++)
     {
-        for (int x = 0; x < width; x++)
-        {
-            array[y][x] = mvwinch(win, y, x);
-        }
+        // Make sure to use wide-character read API
+        mvwinnwstr(win, y, 0, array[y], width);
         array[y][width] = L'\0'; // Null-terminate the line
     }
 }

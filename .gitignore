@@ -20,6 +20,9 @@ coverage/
 # macOS system files
 .DS_Store
 
+# Editor/language-server caches
+.cache/
+
 # Log files
 log/
 

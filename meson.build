@@ -57,8 +57,23 @@ if cc.get_id() == 'msvc'
     # Needed for unicode on Windows
     add_project_arguments('/utf-8', language: 'c')
 else
-    # Needed to make GCC happy with `strptime` on certain systems
-    add_project_arguments('-D_XOPEN_SOURCE', '-D_USE_XOPEN', '-D_GNU_SOURCE', language : 'c')
+    # -D_XOPEN_SOURCE=700
+    #   Exposes strptime() and needed for ncurses wide char support (needs >=
+    #   500).
+    #
+    # -D_GNU_SOURCE
+    #   Needed for for strptime() on glibc. Side effect: glibc forces
+    #   _XOPEN_SOURCE back up to 700 whenever _GNU_SOURCE is set.
+    #
+    # -D__USE_XOPEN
+    #   Extra fallback for strptime() on glibc setups where _XOPEN_SOURCE
+    #   alone hasn't been enough: https://stackoverflow.com/questions/15334558
+    #
+    # -D_DARWIN_C_SOURCE
+    #   Without this, _XOPEN_SOURCE=700 hides BSD-only symbols on macOS,
+    #   e.g. SIGWINCH. No-op on non-Darwin platforms.
+    add_project_arguments('-D_XOPEN_SOURCE=700', '-D_GNU_SOURCE', '-D__USE_XOPEN', '-D_DARWIN_C_SOURCE',
+                           language : 'c')
 endif
 
 build_defines = []
