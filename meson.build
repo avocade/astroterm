@@ -325,6 +325,7 @@ foreach test_file : test_files
         test_name,
         test_file + unity_source_files + embedded_files,
         link_with: [lib_project, unity_lib],
+        dependencies: [curses, math],
         include_directories: project_include_dirs + test_include_dirs,
         c_args: '-DUNITY_INCLUDE_CONFIG_H', # Needed to test doubles
         install: false
