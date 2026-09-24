@@ -20,6 +20,9 @@ _<p align="center">The night sky above Singapore on January 2, 2025<br>See <a hr
   - [Features](#features)
   - [Installation](#installation)
   - [Usage](#usage)
+  - [Keys](#keys)
+  - [Satellites](#satellites)
+  - [Under the Stars](#under-the-stars)
   - [Troubleshooting](#troubleshooting)
   - [Citations](#citations)
   - [Data Sources](#data-sources)
@@ -31,6 +34,11 @@ _<p align="center">The night sky above Singapore on January 2, 2025<br>See <a hr
 - 🌘 **Moon Phases:** Precise lunar phases in real-time
 - 🌌 **Constellation Figures:** Detailed constellation shapes
 - ⚡ **Performance Optimized:** Lightweight and fast ASCII rendering
+- ⌨️ **Live Controls:** Toggle everything while it runs; press <kbd>?</kbd> for the keys
+- 🔴 **Night Vision:** Red on black, so you keep your dark adaptation outdoors
+- 🛰️ **Satellites:** The ISS and Tiangong with their next visible pass, and Starlink as tiny dots
+- ⏩ **Time Controls:** Pause, fast-forward up to 3600x, jump back to now
+- ➶ **Motion Vectors:** See where satellites are heading and how the Moon and planets drift against the stars
 
 ![Stars above Syndey, AU on January 6, 2025](./assets/SYD_2025-01-06.png)
 
@@ -158,13 +166,15 @@ The `--help` flag displays all supported options:
 ```text
 Usage: astroterm [OPTION]...
 
+Usage: astroterm [OPTION]...
+
   -a, --latitude=<degrees>  Observer latitude [-90°, 90°] (default: 0.0)
   -o, --longitude=<degrees> Observer longitude [-180°, 180°] (default: 0.0)
-  -d, --datetime=<yyyy-mm-ddThh:mm:ss>
+  -d, --datetime=<yyyy-mm-ddThh:mm:ss> 
                             Observation datetime in UTC
   -t, --threshold=<float>   Only render stars brighter than this magnitude
                             (default: 5.0)
-  -l, --label-thresh=<float>
+  -l, --label-thresh=<float> 
                             Label stars brighter than this magnitude (default:
                             0.25)
   -f, --fps=<int>           Frames per second (default: 24)
@@ -180,7 +190,7 @@ Usage: astroterm [OPTION]...
   -q, --quit-on-any         Quit on any keypress (default is to quit on 'q' or
                             'ESC' only)
   -m, --metadata            Display metadata
-  -r, --aspect-ratio=<float>
+  -r, --aspect-ratio=<float> 
                             Override the calculated terminal cell aspect ratio.
                             Use this if your projection is not 'square.' A value
                             around 2.0 works well for most cases
@@ -190,10 +200,18 @@ Usage: astroterm [OPTION]...
                             If the name contains multiple words, enclose the
                             name in single or double quotes. For a list of
                             available cities, see:
-                            https://github.com/da-luce/astroterm/blob/main/data/
-                            cities.csv
+                            https://github.com/da-luce/astroterm/blob/v1.2.0/dat
+                            a/cities.csv
   -v, --version             Display version info and exit
+      --night               Start in red night-vision mode (toggle live with
+                            'r')
+      --offline             Never download satellite data (the ISS, Tiangong and
+                            Starlink then use the local cache)
+      --starlink            Show sunlit Starlink satellites as tiny dots (toggle
+                            live with 'x', 'X' adds those in shadow)
 ```
+
+Options only set the starting state: every display option can be toggled live (see [Keys](#keys)).
 
 ### Shell Completions
 
@@ -252,6 +270,56 @@ For more options and help, run `astroterm -h` or `astroterm --help`.
 > [!TIP]
 > Star magnitudes decrease as apparent brightness increases, i.e., to show more stars, increase the threshold.
 
+## Keys
+
+Press <kbd>?</kbd> at any time for a help overlay that shows every key and its current state.
+
+| Key | Action |
+|-----|--------|
+| <kbd>c</kbd> <kbd>C</kbd> <kbd>g</kbd> <kbd>u</kbd> <kbd>b</kbd> <kbd>m</kbd> | Colors, constellations, grid, Unicode, braille lines, metadata panel |
+| <kbd>r</kbd> | Red night vision |
+| <kbd>i</kbd> | Space stations (ISS, Tiangong) |
+| <kbd>x</kbd> / <kbd>X</kbd> | Starlink (sunlit ones) / also those in Earth's shadow |
+| <kbd>v</kbd> | Motion vectors |
+| <kbd>+</kbd> <kbd>-</kbd> | Show fainter or fewer stars |
+| <kbd>space</kbd> | Pause time |
+| <kbd><</kbd> <kbd>></kbd> | Slower or faster: 1x, 10x, 60x, 600x, 3600x |
+| <kbd>n</kbd> | Back to now, realtime |
+| <kbd>←</kbd> <kbd>→</kbd> <kbd>↓</kbd> | Rotate the dome so the horizon you face is at the bottom; reset |
+| <kbd>q</kbd> <kbd>ESC</kbd> | Quit (<kbd>ESC</kbd> closes the help first) |
+
+Motion vectors show where satellites will be 10 seconds later, and where the Sun, Moon and planets will be among the
+stars a day later. The daily turning of the whole sky is left out, since every star shares it: what remains is
+each body's own motion. The Moon drifts about 13° east a day, and a planet in retrograde points west.
+
+## Satellites
+
+The ISS and China's Tiangong are drawn like planets, dimmed while they are in Earth's shadow. A line in the
+bottom-left corner tells you where the ISS is right now, or when its next visible pass starts, from which direction
+and how high it gets. A visible pass is one where the station is lit by the Sun while your sky is dark. When none
+is coming in the next three days, the line shows the next pass anyway, marked as daylight or twilight.
+
+Starlink satellites that are in sunlight, the ones you could actually see, appear as single braille dots beneath the
+stars. Press <kbd>X</kbd> to also see the ones in Earth's shadow.
+
+Positions are computed with SGP4 from [CelesTrak](https://celestrak.org) orbital elements. astroterm keeps them in
+`$XDG_CACHE_HOME/astroterm` (usually `~/.cache/astroterm`) and refreshes them with `curl` when you start it,
+if the data is older than 12 hours. It asks at most once every two hours, which is how often CelesTrak updates.
+Nothing is sent except those requests, and `--offline` turns off the network entirely. Elements more than 14 days
+away from the time you are looking at are not drawn, because they would put satellites in the wrong place.
+
+## Under the Stars
+
+Night vision draws only red on black, but astroterm cannot dim what it does not draw. Before you go out:
+
+1. Run astroterm once while you still have a connection, so the satellite data is cached.
+2. Set your location: `astroterm -i Stockholm` or `-a <latitude> -o <longitude>`.
+3. Turn the screen brightness all the way down and switch off the keyboard backlight.
+4. Make the terminal full screen and hide anything bright around it (for tmux: `tmux set status off`).
+5. For red everywhere, use your system's color filter (macOS: Accessibility › Display › Color Filters › Color Tint).
+
+A handy alias: `alias sky='astroterm -i Stockholm -u -c -C --night'`.
+
 ## Troubleshooting
 
 <!-- omit in toc -->
@@ -308,3 +376,5 @@ Many thanks to the following resources, which were invaluable to the development
 - Cities: [GeoNames](https://download.geonames.org/) (Filtered and condensed using [filter_cities.py](./scripts/filter_cities.py))
 - Planet orbital elements: [NASA Jet Propulsion Laboratory](https://ssd.jpl.nasa.gov/planets/approx_pos.html)
 - Planet magnitudes: [Computing Apparent Planetary Magnitudes for The Astronomical Almanac](https://arxiv.org/abs/1808.01973)
+- Satellite orbital elements: [CelesTrak](https://celestrak.org/NORAD/documentation/gp-data-formats.php) (OMM CSV)
+- Satellite propagation: [Revisiting Spacetrack Report #3](https://celestrak.org/publications/AIAA/2006-6753/), Vallado et al.; verified against [python-sgp4](https://pypi.org/project/sgp4/) and [Skyfield](https://rhodesmill.org/skyfield/) (see [gen_sgp4_vectors.py](./scripts/gen_sgp4_vectors.py))
