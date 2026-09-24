@@ -5,6 +5,7 @@
 #include "data/keplerian_elements.h"
 #include "macros.h"
 #include "parse_BSC5.h"
+#include "sim_clock.h"
 #include "stopwatch.h"
 #include "term.h"
 #include "version.h"
@@ -50,6 +51,7 @@ static COORD winsize;
 // Default to current time in dt_string_utc is NULL
 static double julian_date = 0.0;
 static double julian_date_start = 0.0; // Note of when we started
+static struct SimClock sim_clock;
 
 int main(int argc, char *argv[])
 {
@@ -136,11 +138,17 @@ int main(int argc, char *argv[])
         resize_meta(metadata_win);
     }
 
+    // Simulation time is derived from the realtime clock each frame, so slow
+    // frames or a suspended process never make the sky fall behind
+    sim_clock_init(&sim_clock, julian_date_start, clock_realtime_s(), config.speed);
+
     // Render loop
     while (true)
     {
         struct SwTimestamp frame_begin;
         sw_gettime(&frame_begin);
+
+        julian_date = sim_clock_jd(&sim_clock, clock_realtime_s());
 
 #ifdef _WIN32
         // Use this function to catch console resizes on Windows
@@ -208,13 +216,6 @@ int main(int argc, char *argv[])
             wnoutrefresh(metadata_win);
         }
         doupdate();
-
-        // TODO: this timing scheme *should* minimize any drift or divergence
-        // between simulation time and realtime. Check this to make sure.
-
-        // Increment "simulation" time
-        const double microsec_per_day = 24.0 * 60.0 * 60.0 * 1.0E6;
-        julian_date += (double)dt / microsec_per_day * config.speed;
 
         // Determine time it took to update positions and render to screen
         struct SwTimestamp frame_end;
@@ -477,8 +478,8 @@ void convert_options(struct Conf *config)
     // Convert Gregorian calendar date to Julian date
     if (config->dt_string_utc == NULL)
     {
-        // Set julian date to current time
-        julian_date_start = current_julian_date();
+        // Set julian date to current time (sub-second precision)
+        julian_date_start = unix_to_julian_date(clock_realtime_s());
         julian_date = julian_date_start;
     }
     else

@@ -11,6 +11,7 @@ project_source_files += [
     files('term.c'),
     files('city.c'),
     files('split_lines.c'),
+    files('sim_clock.c'),
 ]
 
 # NOTE: We add main.c separately in the root Meson.build file to avoid duplicate "main" functions when compiling tests

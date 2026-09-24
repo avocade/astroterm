@@ -7,6 +7,7 @@ test_files += [
     files('stopwatch_test.c'),
     files('drawing_test.c'),
     files('misc_test.c'),
+    files('sim_clock_test.c'),
 ]
 
 test_include_dirs += [
