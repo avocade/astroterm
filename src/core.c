@@ -500,8 +500,10 @@ int map_float_to_int_range(double min_float, double max_float, int min_int, int 
 
 bool string_to_time(const char *string, struct tm *time)
 {
+    // The string is UTC: no mktime() here, which would read the fields as
+    // local time and shift them by an hour whenever DST is in effect
+    memset(time, 0, sizeof(*time));
     const char *pointer = strptime(string, "%Y-%m-%dT%H:%M:%S", time);
-    mktime(time);
 
     if (pointer == NULL)
     {
