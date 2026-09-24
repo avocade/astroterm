@@ -1,0 +1,359 @@
+#include "ui.h"
+#include "macros.h"
+#include "term.h"
+
+#include <math.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+
+#define KEY_ESCAPE 27
+#define ROTATION_STEP (15.0 * M_PI / 180.0)
+#define THRESHOLD_STEP 0.5f
+#define THRESHOLD_MIN -1.5f
+#define THRESHOLD_MAX 8.0f
+
+enum UiCommand
+{
+    CMD_NONE = 0,
+    CMD_COLOR,
+    CMD_CONSTELL,
+    CMD_GRID,
+    CMD_UNICODE,
+    CMD_BRAILLE,
+    CMD_METADATA,
+    CMD_THRESH_UP,
+    CMD_THRESH_DOWN,
+    CMD_PAUSE,
+    CMD_FASTER,
+    CMD_SLOWER,
+    CMD_NOW,
+    CMD_ROT_LEFT,
+    CMD_ROT_RIGHT,
+    CMD_ROT_RESET,
+    CMD_HELP,
+    CMD_QUIT,
+};
+
+/* One help row: the keys that trigger it and the command for each key
+ */
+struct KeyRow
+{
+    const char *keys;
+    const char *label;
+    int key[3];
+    enum UiCommand cmd[3];
+};
+
+// The single source of truth for keys, help rows and dispatch
+static const struct KeyRow key_rows[] = {
+    {"c", "Colors", {'c'}, {CMD_COLOR}},
+    {"C", "Constellations", {'C'}, {CMD_CONSTELL}},
+    {"g", "Grid", {'g'}, {CMD_GRID}},
+    {"u", "Unicode", {'u'}, {CMD_UNICODE}},
+    {"b", "Braille lines", {'b'}, {CMD_BRAILLE}},
+    {"m", "Metadata panel", {'m'}, {CMD_METADATA}},
+    {"+ -", "Faintest stars (mag)", {'+', '=', '-'}, {CMD_THRESH_UP, CMD_THRESH_UP, CMD_THRESH_DOWN}},
+    {"space", "Pause time", {' '}, {CMD_PAUSE}},
+    {"< >", "Speed", {'<', ',', '>'}, {CMD_SLOWER, CMD_SLOWER, CMD_FASTER}},
+    {"", "", {'.'}, {CMD_FASTER}}, // Unshifted '>' on most layouts
+    {"n", "Back to now", {'n'}, {CMD_NOW}},
+    {"arrows", "Rotate dome (down: reset)", {KEY_LEFT, KEY_RIGHT, KEY_DOWN}, {CMD_ROT_LEFT, CMD_ROT_RIGHT, CMD_ROT_RESET}},
+    {"?", "This help", {'?'}, {CMD_HELP}},
+    {"q ESC", "Quit (ESC closes help)", {'q', KEY_ESCAPE}, {CMD_QUIT, CMD_QUIT}},
+};
+
+#define NUM_KEY_ROWS (sizeof(key_rows) / sizeof(key_rows[0]))
+
+static enum UiCommand lookup(int ch)
+{
+    for (unsigned int i = 0; i < NUM_KEY_ROWS; ++i)
+    {
+        for (int k = 0; k < 3; ++k)
+        {
+            if (key_rows[i].cmd[k] != CMD_NONE && key_rows[i].key[k] == ch)
+            {
+                return key_rows[i].cmd[k];
+            }
+        }
+    }
+    return CMD_NONE;
+}
+
+static const char *on_off(bool value)
+{
+    return value ? "on" : "off";
+}
+
+void ui_toast(struct UiState *ui, double mono, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(ui->toast, sizeof(ui->toast), fmt, args);
+    va_end(args);
+    ui->toast_until = mono + UI_TOAST_SECONDS;
+}
+
+const char *ui_current_toast(const struct UiState *ui, double mono)
+{
+    if (ui->toast[0] == '\0' || mono >= ui->toast_until)
+    {
+        return NULL;
+    }
+    return ui->toast;
+}
+
+void ui_speed_text(const struct SimClock *clock, char *buf, size_t len)
+{
+    if (clock->paused)
+    {
+        snprintf(buf, len, "paused (%gx)", clock->speed);
+    }
+    else
+    {
+        snprintf(buf, len, "%gx", clock->speed);
+    }
+}
+
+static double rotation_degrees(const struct Conf *config)
+{
+    double deg = fmod(config->rotation * 180.0 / M_PI, 360.0);
+    return deg < 0 ? deg + 360.0 : deg;
+}
+
+enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, struct SimClock *clock,
+                            const struct UiContext *ctx)
+{
+    if (config->quit_on_any)
+    {
+        return UI_QUIT;
+    }
+
+    enum UiCommand cmd = lookup(ch);
+    char speed[32];
+
+    switch (cmd)
+    {
+    case CMD_NONE:
+        return UI_NONE;
+
+    case CMD_COLOR:
+        if (!ctx->has_colors)
+        {
+            ui_toast(ui, ctx->mono, "No color support in this terminal");
+            return UI_NONE;
+        }
+        config->color = !config->color;
+        ui_toast(ui, ctx->mono, "Colors: %s", on_off(config->color));
+        return UI_PALETTE;
+
+    case CMD_CONSTELL:
+        config->constell = !config->constell;
+        ui_toast(ui, ctx->mono, "Constellations: %s", on_off(config->constell));
+        return UI_NONE;
+
+    case CMD_GRID:
+        config->grid = !config->grid;
+        ui_toast(ui, ctx->mono, "Grid: %s", on_off(config->grid));
+        return UI_NONE;
+
+    case CMD_UNICODE:
+        config->unicode = !config->unicode;
+        ui_toast(ui, ctx->mono, "Unicode: %s", on_off(config->unicode));
+        return UI_NONE;
+
+    case CMD_BRAILLE:
+        config->braille = !config->braille;
+        if (config->braille && !config->unicode)
+        {
+            ui_toast(ui, ctx->mono, "Braille lines: on (needs Unicode: press u)");
+        }
+        else
+        {
+            ui_toast(ui, ctx->mono, "Braille lines: %s", on_off(config->braille));
+        }
+        return UI_NONE;
+
+    case CMD_METADATA:
+        config->metadata = !config->metadata;
+        ui_toast(ui, ctx->mono, "Metadata: %s", on_off(config->metadata));
+        return UI_LAYOUT;
+
+    case CMD_THRESH_UP:
+        config->threshold = MIN(THRESHOLD_MAX, config->threshold + THRESHOLD_STEP);
+        ui_toast(ui, ctx->mono, "Faintest stars: mag %.1f", config->threshold);
+        return UI_NONE;
+
+    case CMD_THRESH_DOWN:
+        config->threshold = MAX(THRESHOLD_MIN, config->threshold - THRESHOLD_STEP);
+        ui_toast(ui, ctx->mono, "Faintest stars: mag %.1f", config->threshold);
+        return UI_NONE;
+
+    case CMD_PAUSE:
+        sim_clock_set_paused(clock, !clock->paused, ctx->wall);
+        ui_speed_text(clock, speed, sizeof(speed));
+        ui_toast(ui, ctx->mono, clock->paused ? "Time: %s" : "Time: running (%s)", speed);
+        return UI_NONE;
+
+    case CMD_FASTER:
+    case CMD_SLOWER:
+        sim_clock_step_speed(clock, cmd == CMD_FASTER ? 1 : -1, ctx->wall);
+        ui_speed_text(clock, speed, sizeof(speed));
+        ui_toast(ui, ctx->mono, "Speed: %s", speed);
+        return UI_NONE;
+
+    case CMD_NOW:
+        sim_clock_now(clock, ctx->wall);
+        ui_toast(ui, ctx->mono, "Now, realtime");
+        return UI_NONE;
+
+    case CMD_ROT_LEFT:
+    case CMD_ROT_RIGHT:
+    case CMD_ROT_RESET:
+        if (cmd == CMD_ROT_RESET)
+        {
+            config->rotation = 0.0;
+        }
+        else
+        {
+            config->rotation += cmd == CMD_ROT_RIGHT ? ROTATION_STEP : -ROTATION_STEP;
+            config->rotation = fmod(config->rotation, 2.0 * M_PI);
+        }
+        ui_toast(ui, ctx->mono, "Rotation: %.0f°", rotation_degrees(config));
+        return UI_NONE;
+
+    case CMD_HELP:
+        ui->help_open = !ui->help_open;
+        return UI_LAYOUT;
+
+    case CMD_QUIT:
+        if (ch == KEY_ESCAPE && ui->help_open)
+        {
+            ui->help_open = false;
+            return UI_LAYOUT;
+        }
+        return UI_QUIT;
+    }
+
+    return UI_NONE;
+}
+
+static void state_text(enum UiCommand cmd, const struct Conf *config, const struct SimClock *clock, char *buf,
+                       size_t len)
+{
+    buf[0] = '\0';
+    switch (cmd)
+    {
+    case CMD_COLOR:
+        snprintf(buf, len, "%s", on_off(config->color));
+        break;
+    case CMD_CONSTELL:
+        snprintf(buf, len, "%s", on_off(config->constell));
+        break;
+    case CMD_GRID:
+        snprintf(buf, len, "%s", on_off(config->grid));
+        break;
+    case CMD_UNICODE:
+        snprintf(buf, len, "%s", on_off(config->unicode));
+        break;
+    case CMD_BRAILLE:
+        snprintf(buf, len, "%s", on_off(config->braille));
+        break;
+    case CMD_METADATA:
+        snprintf(buf, len, "%s", on_off(config->metadata));
+        break;
+    case CMD_THRESH_UP:
+        snprintf(buf, len, "%.1f", config->threshold);
+        break;
+    case CMD_PAUSE:
+        snprintf(buf, len, "%s", clock->paused ? "paused" : "running");
+        break;
+    case CMD_SLOWER:
+        ui_speed_text(clock, buf, len);
+        break;
+    case CMD_ROT_LEFT:
+        snprintf(buf, len, "%.0f°", rotation_degrees(config));
+        break;
+    default:
+        break;
+    }
+}
+
+void ui_draw_help(const struct Conf *config, const struct SimClock *clock, attr_t attr)
+{
+    const int width = 50;
+    int height = 4; // Border, title, blank line, border
+    for (unsigned int i = 0; i < NUM_KEY_ROWS; ++i)
+    {
+        height += key_rows[i].keys[0] != '\0';
+    }
+
+    int h = MIN(height, LINES);
+    int w = MIN(width, COLS);
+    if (h < 3 || w < 10)
+    {
+        return;
+    }
+
+    WINDOW *win = newwin(h, w, (LINES - h) / 2, (COLS - w) / 2);
+    if (win == NULL)
+    {
+        return;
+    }
+    wbkgd(win, attr);
+    werase(win);
+    box(win, 0, 0);
+    mvwaddstr_truncate(win, 1, 2, "astroterm keys");
+
+    int row = 3;
+    for (unsigned int i = 0; i < NUM_KEY_ROWS && row < h - 1; ++i)
+    {
+        const struct KeyRow *kr = &key_rows[i];
+        if (kr->keys[0] == '\0')
+        {
+            continue;
+        }
+        char state[32];
+        state_text(kr->cmd[0], config, clock, state, sizeof(state));
+
+        char line[96];
+        snprintf(line, sizeof(line), "%-7s %-26s %s", kr->keys, kr->label, state);
+        mvwaddstr_truncate(win, row++, 2, line);
+    }
+
+    wnoutrefresh(win);
+    delwin(win);
+}
+
+void ui_draw_corner(WINDOW *sky_win, const char *const *lines, int num_lines, attr_t attr)
+{
+    int widest = 0;
+    for (int i = 0; i < num_lines; ++i)
+    {
+        if (lines[i] != NULL)
+        {
+            widest = MAX(widest, (int)strlen(lines[i]));
+        }
+    }
+    if (widest == 0)
+    {
+        return;
+    }
+
+    // Prefer the margin beside the (square) sky window; fall back to its
+    // bottom-left corner, which lies outside the circular dome
+    int sky_x = getbegx(sky_win);
+    WINDOW *target = sky_x > widest ? stdscr : sky_win;
+    int bottom = getmaxy(target) - 1;
+
+    wattron(target, attr);
+    int row = bottom;
+    for (int i = num_lines - 1; i >= 0 && row >= 0; --i)
+    {
+        if (lines[i] != NULL && lines[i][0] != '\0')
+        {
+            mvwaddstr_truncate(target, row--, 0, lines[i]);
+        }
+    }
+    wattroff(target, attr);
+}

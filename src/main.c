@@ -8,6 +8,7 @@
 #include "sim_clock.h"
 #include "stopwatch.h"
 #include "term.h"
+#include "ui.h"
 #include "version.h"
 
 // Embedded data generated during build
@@ -133,17 +134,25 @@ int main(int argc, char *argv[])
 
     // Metadata window
     WINDOW *metadata_win = newwin(0, 0, 0, 0); // Position at top left
-    if (config.metadata)
-    {
-        resize_meta(metadata_win);
-    }
+    resize_meta(metadata_win);
 
     // Simulation time is derived from the realtime clock each frame, so slow
     // frames or a suspended process never make the sky fall behind
     sim_clock_init(&sim_clock, julian_date_start, clock_realtime_s(), config.speed);
 
+    struct UiState ui = {0};
+    if (config.latitude == 0.0 && config.longitude == 0.0)
+    {
+        ui_toast(&ui, clock_monotonic_s(), "Location 0°, 0°: use -i <city> or -a/-o");
+    }
+    else
+    {
+        ui_toast(&ui, clock_monotonic_s(), "? for keys");
+    }
+
     // Render loop
-    while (true)
+    bool quit = false;
+    while (!quit)
     {
         struct SwTimestamp frame_begin;
         sw_gettime(&frame_begin);
@@ -159,19 +168,17 @@ int main(int argc, char *argv[])
         {
             resize_ncurses();
             resize_main(main_win, &config);
-            if (config.metadata)
-            {
-                resize_meta(metadata_win);
-            }
-            doupdate();
+            resize_meta(metadata_win);
 
             perform_resize = false;
         }
-        else
-        {
-            werase(metadata_win);
-            werase(main_win);
-        }
+
+        // Everything is redrawn every frame; ncurses only sends what changed.
+        // Erasing stdscr clears whatever a closed modal, panel or toast left
+        // outside the sky window
+        werase(stdscr);
+        werase(metadata_win);
+        werase(main_win);
 
         // Update object positions
         update_star_positions(star_table, num_stars, julian_date, config.latitude, config.longitude);
@@ -202,20 +209,40 @@ int main(int argc, char *argv[])
             render_metadata(metadata_win, &config);
         }
 
-        // Exit if ESC or q is pressed
-        int ch = getch();
-        if (ch != ERR && (ch == 27 || ch == 'q' || config.quit_on_any))
-        {
-            break;
-        }
+        // Toast in the bottom-left corner, off the dome where possible
+        double mono = clock_monotonic_s();
+        const char *corner[1] = {ui_current_toast(&ui, mono)};
+        ui_draw_corner(main_win, corner, 1, A_NORMAL);
 
-        // Use double buffering to avoid flickering while updating
+        // Queue windows bottom to top, then draw once to avoid flickering
+        wnoutrefresh(stdscr);
         wnoutrefresh(main_win);
         if (config.metadata)
         {
             wnoutrefresh(metadata_win);
         }
+        if (ui.help_open)
+        {
+            ui_draw_help(&config, &sim_clock, A_NORMAL);
+        }
         doupdate();
+
+        // Read input only after the frame is on screen, so getch()'s implicit
+        // refresh of stdscr has nothing left to paint
+        int ch;
+        while (!quit && (ch = getch()) != ERR)
+        {
+            struct UiContext ctx = {
+                .wall = clock_realtime_s(),
+                .mono = clock_monotonic_s(),
+                .has_colors = has_colors(),
+            };
+            enum UiAction action = ui_handle_key(ch, &config, &ui, &sim_clock, &ctx);
+            if (action == UI_QUIT)
+            {
+                quit = true;
+            }
+        }
 
         // Determine time it took to update positions and render to screen
         struct SwTimestamp frame_end;
@@ -555,8 +582,8 @@ void resize_meta(WINDOW *win)
     wnoutrefresh(win);
 #endif
 
-    const int meta_lines = 6; // Allows for 6 rows
-    const int meta_cols = 45; // Set to allow enough room for longest line (elapsed time)
+    const int meta_lines = 7; // Allows for 7 rows
+    const int meta_cols = 48; // Set to allow enough room for longest line (elapsed time)
 
     wresize(win, MIN(LINES, meta_lines), MIN(COLS, meta_cols));
 #ifdef _WIN32
@@ -644,6 +671,10 @@ void render_metadata(WINDOW *win, const struct Conf *config)
     // Display elapsed time with proper labels
     mvwprintw(win, 5, 0, "Elapsed Time: \t%03d %s, %03d %s, %02d:%02d:%02d", eyears, year_label, edays, day_label, ehours,
               emins, esecs);
+
+    char speed[32];
+    ui_speed_text(&sim_clock, speed, sizeof(speed));
+    mvwprintw(win, 6, 0, "Speed: \t%s", speed);
 
     return;
 }

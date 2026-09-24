@@ -8,6 +8,7 @@ test_files += [
     files('drawing_test.c'),
     files('misc_test.c'),
     files('sim_clock_test.c'),
+    files('ui_test.c'),
 ]
 
 test_include_dirs += [

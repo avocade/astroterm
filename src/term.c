@@ -1,4 +1,5 @@
 #include "term.h"
+#include "macros.h"
 
 #include <curses.h>
 #include <math.h>
@@ -19,38 +20,45 @@ void ncurses_init(bool color)
 {
     initscr();
     clear();
-    noecho();    // Input characters aren't echoed
-    cbreak();    // Disable line buffering
-    curs_set(0); // Make cursor invisible
-    timeout(0);  // Non-blocking read for getch
+    noecho();             // Input characters aren't echoed
+    cbreak();             // Disable line buffering
+    curs_set(0);          // Make cursor invisible
+    timeout(0);           // Non-blocking read for getch
+    keypad(stdscr, TRUE); // Decode arrow/function keys instead of reporting ESC
+#ifdef NCURSES_VERSION
+    set_escdelay(25); // Keep a lone ESC responsive (not available in PDCurses)
+#endif
 
     // Set the console output code page to UTF-8 on Windows
 #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
 #endif
 
-    // Initialize colors
-    if (color)
+    // Colors are initialised whenever the terminal supports them, so they can
+    // be toggled live; `color` only decides whether to insist on them
+    if (!has_colors())
     {
-        if (!has_colors())
+        if (color)
         {
-            printf("Your terminal does not support colors");
+            endwin();
+            printf("Your terminal does not support colors\n");
             exit(EXIT_FAILURE);
         }
-
-        start_color();
-        use_default_colors(); // Use terminal colors (fg and bg for pair 0)
-
-        // Colors with default backgrounds
-        init_pair(1, COLOR_BLACK, -1);
-        init_pair(2, COLOR_RED, -1);
-        init_pair(3, COLOR_GREEN, -1);
-        init_pair(4, COLOR_YELLOW, -1);
-        init_pair(5, COLOR_BLUE, -1);
-        init_pair(6, COLOR_MAGENTA, -1);
-        init_pair(7, COLOR_CYAN, -1);
-        init_pair(8, COLOR_WHITE, -1);
+        return;
     }
+
+    start_color();
+    use_default_colors(); // Use terminal colors (fg and bg for pair 0)
+
+    // Colors with default backgrounds
+    init_pair(1, COLOR_BLACK, -1);
+    init_pair(2, COLOR_RED, -1);
+    init_pair(3, COLOR_GREEN, -1);
+    init_pair(4, COLOR_YELLOW, -1);
+    init_pair(5, COLOR_BLUE, -1);
+    init_pair(6, COLOR_MAGENTA, -1);
+    init_pair(7, COLOR_CYAN, -1);
+    init_pair(8, COLOR_WHITE, -1);
 }
 
 void ncurses_kill(void)
@@ -182,13 +190,13 @@ void mvwaddstr_truncate(WINDOW *win, int y, int x, const char *str)
     int max_x = getmaxx(win);
     int space_left = max_x - x;
 
-    // Don't write beyond the line
+    // Don't write beyond the line (or the buffer)
     if (space_left > 0)
     {
-        // Truncate if necessary
+        size_t n = MIN((size_t)space_left, (size_t)(MAX_STR_LEN - 1));
         char truncated[MAX_STR_LEN];
-        strncpy(truncated, str, space_left);
-        truncated[space_left] = '\0';
+        strncpy(truncated, str, n);
+        truncated[n] = '\0';
         mvwaddstr(win, y, x, truncated);
     }
 }

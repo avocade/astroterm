@@ -23,6 +23,7 @@ struct Conf
     float speed;
     double julian_date;
     double aspect_ratio;
+    double rotation; // Dome rotation (radians), applied to every projected object
     bool quit_on_any;
     bool unicode;
     bool braille;

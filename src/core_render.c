@@ -10,12 +10,13 @@
 #include <math.h>
 #include <stdlib.h>
 
-void horizontal_to_polar(double azimuth, double altitude, double *radius, double *theta)
+void horizontal_to_polar(const struct Conf *config, double azimuth, double altitude, double *radius, double *theta)
 {
     double theta_sphere, phi_sphere;
     horizontal_to_spherical(azimuth, altitude, &theta_sphere, &phi_sphere);
 
     project_stereographic_north(1.0, theta_sphere, phi_sphere, radius, theta);
+    *theta += config->rotation;
 
     return;
 }
@@ -23,18 +24,18 @@ void horizontal_to_polar(double azimuth, double altitude, double *radius, double
 void render_object_stereo(WINDOW *win, struct ObjectBase *object, const struct Conf *config)
 {
     double radius_polar, theta_polar;
-    horizontal_to_polar(object->azimuth, object->altitude, &radius_polar, &theta_polar);
+    horizontal_to_polar(config, object->azimuth, object->altitude, &radius_polar, &theta_polar);
+
+    // If outside projection (or not a number), ignore
+    if (!(fabs(radius_polar) <= 1.0) || !isfinite(theta_polar))
+    {
+        return;
+    }
 
     int y, x;
     int height, width;
     getmaxyx(win, height, width);
     polar_to_win(radius_polar, theta_polar, height, width, &y, &x);
-
-    // If outside projection, ignore
-    if (fabs(radius_polar) > 1)
-    {
-        return;
-    }
 
     bool use_color = config->color && object->color_pair != 0;
 
@@ -125,8 +126,8 @@ void render_constellation(WINDOW *win, const struct Conf *config, struct Constel
         // or cache coordinates
         double radius_a, theta_a;
         double radius_b, theta_b;
-        horizontal_to_polar(star_a.base.azimuth, star_a.base.altitude, &radius_a, &theta_a);
-        horizontal_to_polar(star_b.base.azimuth, star_b.base.altitude, &radius_b, &theta_b);
+        horizontal_to_polar(config, star_a.base.azimuth, star_a.base.altitude, &radius_a, &theta_a);
+        horizontal_to_polar(config, star_b.base.azimuth, star_b.base.altitude, &radius_b, &theta_b);
 
         // Clip to edge of screen
         if (fabs(radius_a) > 1 && fabs(radius_b) > 1)
@@ -303,9 +304,10 @@ void render_azimuthal_grid(WINDOW *win, const struct Conf *config)
         for (int i = 0; i < number_angles; ++i)
         {
             int angle = angles[i] + 90 * quad;
+            double drawn = angle * to_rad + config->rotation;
 
-            int y = rad_vertical - round(rad_vertical * sin(angle * to_rad));
-            int x = rad_horizontal + round(rad_horizontal * cos(angle * to_rad));
+            int y = rad_vertical - round(rad_vertical * sin(drawn));
+            int x = rad_horizontal + round(rad_horizontal * cos(drawn));
 
             if (config->unicode)
             {
@@ -353,13 +355,20 @@ void render_cardinal_directions(WINDOW *win, const struct Conf *config)
     int maxy = height - 1;
     int maxx = width - 1;
 
-    int half_maxy = round(maxy / 2.0);
-    int half_maxx = round(maxx / 2.0);
+    // Place the letters on the horizon through the same projection as every
+    // object, so they follow the dome's rotation
+    const char letters[4] = {'N', 'E', 'S', 'W'};
+    for (int i = 0; i < 4; ++i)
+    {
+        double radius, theta;
+        horizontal_to_polar(config, i * M_PI / 2.0, 0.0, &radius, &theta);
 
-    mvwaddch(win, 0, half_maxx, 'N');
-    mvwaddch(win, half_maxy, width - 1, 'W');
-    mvwaddch(win, height - 1, half_maxx, 'S');
-    mvwaddch(win, half_maxy, 0, 'E');
+        int y, x;
+        polar_to_win(radius, theta, height, width, &y, &x);
+        y = MAX(0, MIN(maxy, y));
+        x = MAX(0, MIN(maxx, x));
+        mvwaddch(win, y, x, letters[i]);
+    }
 
     if (config->color)
     {
