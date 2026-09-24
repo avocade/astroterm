@@ -247,6 +247,28 @@ void render_moon_stereo(WINDOW *win, const struct Conf *config, struct Moon moon
     return;
 }
 
+void render_stations(WINDOW *win, const struct Conf *config, const struct SatCatalog *stations)
+{
+    for (int i = 0; i < stations->count; ++i)
+    {
+        const struct Satellite *sat = &stations->sats[i];
+        if (!sat->ok || sat->altitude <= 0.0)
+        {
+            continue;
+        }
+
+        struct ObjectBase base = {
+            .azimuth = sat->azimuth,
+            .altitude = sat->altitude,
+            .color_pair = 0,
+            .symbol_ASCII = '#',
+            .symbol_unicode = "⌖",
+            .label = sat->catnr == CATNR_ISS ? "ISS" : "Tiangong",
+        };
+        render_object_stereo(win, &base, config, sat->sunlit ? ROLE_STATION : ROLE_STATION_DARK);
+    }
+}
+
 int gcd(int a, int b)
 {
     while (b != 0)

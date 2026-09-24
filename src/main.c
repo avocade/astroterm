@@ -3,6 +3,9 @@
 #include "core_position.h"
 #include "core_render.h"
 #include "data/keplerian_elements.h"
+#include "feed.h"
+#include "omm.h"
+#include "satellite.h"
 #include "macros.h"
 #include "parse_BSC5.h"
 #include "sim_clock.h"
@@ -54,6 +57,115 @@ static double julian_date = 0.0;
 static double julian_date_start = 0.0; // Note of when we started
 static struct SimClock sim_clock;
 
+static const long station_catnrs[] = {CATNR_ISS, CATNR_TIANGONG};
+
+/* Load a cached feed into a catalog (empty when there is no usable data)
+ */
+static void load_catalog(enum FeedId id, const long *only, int num_only, struct SatCatalog *out)
+{
+    out->sats = NULL;
+    out->count = 0;
+
+    size_t len;
+    char *data = feed_read(id, &len);
+    if (data == NULL)
+    {
+        return;
+    }
+    struct OmmRecord *records = NULL;
+    int n = omm_parse_csv(data, len, &records);
+    free(data);
+    if (n > 0)
+    {
+        satellite_catalog_build(records, n, only, num_only, out);
+    }
+    free(records);
+}
+
+/* Local clock time of a Julian date, with the weekday when not on `today_jd`
+ */
+static void format_local_time(double jd, double today_jd, char *buf, size_t len)
+{
+    time_t t = (time_t)((jd - 2440587.5) * 86400.0);
+    time_t today = (time_t)((today_jd - 2440587.5) * 86400.0);
+    struct tm when = *localtime(&t);
+    struct tm now = *localtime(&today);
+    bool same_day = when.tm_year == now.tm_year && when.tm_yday == now.tm_yday;
+    strftime(buf, len, same_day ? "%H:%M" : "%a %H:%M", &when);
+}
+
+/* The ISS corner line: where it is now, or its next visible pass. Predictions
+ * are cached while simulation time stays inside the predicted window, and
+ * recomputed at most twice per wall second
+ */
+static void iss_status(const struct SatCatalog *stations, const struct Conf *config, double jd, char *buf, size_t len)
+{
+    static struct PassPrediction pass;
+    static bool have_pass = false;
+    static double last_predict = -1.0;
+
+    buf[0] = '\0';
+    const struct Satellite *iss = NULL;
+    for (int i = 0; i < stations->count; ++i)
+    {
+        if (stations->sats[i].catnr == CATNR_ISS)
+        {
+            iss = &stations->sats[i];
+        }
+    }
+    if (iss == NULL || !config->stations)
+    {
+        return;
+    }
+
+    if (iss->ok && iss->altitude > SAT_PASS_MIN_ALTITUDE)
+    {
+        snprintf(buf, len, "ISS up: %.0f° %s%s", iss->altitude * 180.0 / M_PI, compass_point(iss->azimuth),
+                 iss->sunlit ? "" : ", in shadow");
+        return;
+    }
+
+    const double horizon_days = 3.0;
+    static bool visible = true;
+    bool stale = !have_pass || jd < pass.computed_at || (pass.found && jd > pass.end_jd) ||
+                 (!pass.found && jd > pass.computed_at + 1.0 / 24.0);
+    double mono = clock_monotonic_s();
+    if (stale && mono - last_predict >= 0.5)
+    {
+        have_pass = true;
+        last_predict = mono;
+
+        // Prefer a pass you can see (sunlit ISS, dark sky); otherwise say when
+        // it next comes over at all, and in what light
+        visible = satellite_next_pass(iss, jd, horizon_days, config->latitude, config->longitude, true, &pass);
+        if (!visible)
+        {
+            satellite_next_pass(iss, jd, horizon_days, config->latitude, config->longitude, false, &pass);
+        }
+    }
+    if (!have_pass)
+    {
+        return;
+    }
+
+    if (!pass.found)
+    {
+        snprintf(buf, len, "ISS: no pass in 72 h");
+        return;
+    }
+
+    const char *light = "";
+    if (!visible)
+    {
+        double sun = sun_altitude(pass.peak_jd, config->latitude, config->longitude) * 180.0 / M_PI;
+        light = sun > -0.833 ? " (daylight)" : " (twilight)";
+    }
+    char when[32];
+    format_local_time(pass.start_jd, jd, when, sizeof(when));
+    snprintf(buf, len, "ISS %s %s, max %.0f°%s", when, compass_point(pass.start_azimuth),
+             pass.peak_altitude * 180.0 / M_PI, light);
+}
+
 int main(int argc, char *argv[])
 {
     // Default config
@@ -73,6 +185,7 @@ int main(int argc, char *argv[])
         .grid = false,
         .constell = false,
         .metadata = false,
+        .stations = true,
     };
 
     // Parse command line args and convert to internal representations
@@ -118,6 +231,15 @@ int main(int argc, char *argv[])
     // This memory is no longer needed
     free(BSC5_entries);
 
+    // Satellite data is refreshed before the UI starts (see feed.h)
+    char data_message[128] = "";
+    if (config.stations && !config.offline)
+    {
+        feed_refresh_all(data_message, sizeof(data_message));
+    }
+    struct SatCatalog stations;
+    load_catalog(FEED_STATIONS, station_catnrs, 2, &stations);
+
     // Terminal/System settings
     setlocale(LC_ALL, ""); // Required for unicode rendering
 #ifndef _WIN32
@@ -141,7 +263,20 @@ int main(int argc, char *argv[])
     sim_clock_init(&sim_clock, julian_date_start, clock_realtime_s(), config.speed);
 
     struct UiState ui = {0};
-    if (config.latitude == 0.0 && config.longitude == 0.0)
+    double data_age = feed_age_hours(FEED_STATIONS);
+    if (data_message[0] != '\0')
+    {
+        ui_toast(&ui, clock_monotonic_s(), "%s", data_message);
+    }
+    else if (config.stations && stations.count == 0)
+    {
+        ui_toast(&ui, clock_monotonic_s(), "No satellite data yet: run once online");
+    }
+    else if (config.stations && data_age > 48.0)
+    {
+        ui_toast(&ui, clock_monotonic_s(), "Satellite data is %.0f days old", data_age / 24.0);
+    }
+    else if (config.latitude == 0.0 && config.longitude == 0.0)
     {
         ui_toast(&ui, clock_monotonic_s(), "Location 0°, 0°: use -i <city> or -a/-o");
     }
@@ -198,6 +333,13 @@ int main(int argc, char *argv[])
         update_moon_position(&moon_object, julian_date, config.latitude, config.longitude);
         update_moon_phase(&moon_object, julian_date, config.latitude);
 
+        double sun_dir[3];
+        sun_direction(julian_date, sun_dir);
+        for (int i = 0; config.stations && i < stations.count; ++i)
+        {
+            satellite_update(&stations.sats[i], julian_date, config.latitude, config.longitude, sun_dir, false);
+        }
+
         // Render objects
         render_stars_stereo(main_win, &config, star_table, num_stars, num_by_mag);
         if (config.constell)
@@ -206,6 +348,10 @@ int main(int argc, char *argv[])
         }
         render_planets_stereo(main_win, &config, planet_table);
         render_moon_stereo(main_win, &config, moon_object);
+        if (config.stations)
+        {
+            render_stations(main_win, &config, &stations);
+        }
         if (config.grid)
         {
             render_azimuthal_grid(main_win, &config);
@@ -223,8 +369,10 @@ int main(int argc, char *argv[])
 
         // Toast in the bottom-left corner, off the dome where possible
         double mono = clock_monotonic_s();
-        const char *corner[1] = {ui_current_toast(&ui, mono)};
-        ui_draw_corner(main_win, corner, 1, palette_background(config.night));
+        char iss_line[64];
+        iss_status(&stations, &config, julian_date, iss_line, sizeof(iss_line));
+        const char *corner[2] = {iss_line, ui_current_toast(&ui, mono)};
+        ui_draw_corner(main_win, corner, 2, palette_background(config.night));
 
         // Queue windows bottom to top, then draw once to avoid flickering
         wnoutrefresh(stdscr);
@@ -248,6 +396,7 @@ int main(int argc, char *argv[])
                 .wall = clock_realtime_s(),
                 .mono = clock_monotonic_s(),
                 .has_colors = has_colors(),
+                .stations_count = stations.count,
             };
             enum UiAction action = ui_handle_key(ch, &config, &ui, &sim_clock, &ctx);
             if (action == UI_QUIT)
@@ -280,6 +429,7 @@ int main(int argc, char *argv[])
     free_planets(planet_table, NUM_PLANETS);
     free_moon_object(moon_object);
     free_star_names(name_table, num_stars);
+    satellite_catalog_free(&stations);
 
     return EXIT_SUCCESS;
 }
@@ -331,7 +481,7 @@ void parse_options(int argc, char *argv[], struct Conf *config)
     void *argtable[] = {latitude_arg, longitude_arg, datetime_arg,    threshold_arg, label_arg,   fps_arg,  speed_arg,
                         color_arg,    constell_arg,  grid_arg,        unicode_arg,   braille_arg, quit_arg, meta_arg,
                         ratio_arg,    help_arg,      completions_arg, city_arg,      version_arg, night_arg,
-                        end};
+                        offline_arg,  end};
 
     int nerrors = arg_parse(argc, argv, argtable);
 
@@ -490,6 +640,11 @@ void parse_options(int argc, char *argv[], struct Conf *config)
     if (night_arg->count > 0)
     {
         config->night = true;
+    }
+
+    if (offline_arg->count > 0)
+    {
+        config->offline = true;
     }
 
     if (quit_arg->count > 0)

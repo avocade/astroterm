@@ -9,6 +9,8 @@ test_files += [
     files('misc_test.c'),
     files('sim_clock_test.c'),
     files('ui_test.c'),
+    files('satellite_test.c'),
+    files('feed_test.c'),
 ]
 
 test_include_dirs += [

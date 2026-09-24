@@ -65,6 +65,12 @@ void ncurses_init(bool color)
     palette_init();
 }
 
+// Satellite pairs (day)
+#define PAIR_SAT_LIT 9
+#define PAIR_SAT_DARK 10
+#define PAIR_STATION 11
+#define PAIR_VECTOR 12
+
 // Night vision pairs: three reds on true black
 #define PAIR_NIGHT_BRIGHT 20
 #define PAIR_NIGHT_MEDIUM 21
@@ -82,6 +88,11 @@ static void palette_init(void)
     init_pair(PAIR_NIGHT_BRIGHT, few_colors ? COLOR_RED : 196, black);
     init_pair(PAIR_NIGHT_MEDIUM, few_colors ? COLOR_RED : 160, black);
     init_pair(PAIR_NIGHT_DIM, few_colors ? COLOR_RED : 88, black);
+
+    init_pair(PAIR_SAT_LIT, few_colors ? COLOR_BLUE : 39, -1);
+    init_pair(PAIR_SAT_DARK, few_colors ? COLOR_BLUE : 24, -1);
+    init_pair(PAIR_STATION, few_colors ? COLOR_CYAN : 51, -1);
+    init_pair(PAIR_VECTOR, few_colors ? COLOR_WHITE : 242, -1);
 }
 
 attr_t palette_attr(bool night, bool color, enum RenderRole role, int day_pair)
@@ -96,15 +107,34 @@ attr_t palette_attr(bool night, bool color, enum RenderRole role, int day_pair)
         switch (role)
         {
         case ROLE_BODY:
+        case ROLE_STATION:
             return COLOR_PAIR(PAIR_NIGHT_BRIGHT) | (few_colors ? A_BOLD : A_NORMAL);
         case ROLE_LINE:
+        case ROLE_STATION_DARK:
+        case ROLE_SAT_DARK:
+        case ROLE_VECTOR:
             return COLOR_PAIR(PAIR_NIGHT_DIM) | (few_colors ? A_DIM : A_NORMAL);
         default:
             return COLOR_PAIR(PAIR_NIGHT_MEDIUM);
         }
     }
 
-    return color && day_pair != 0 ? COLOR_PAIR(day_pair) : A_NORMAL;
+    // Satellites keep their colors even when upstream object colors are off
+    switch (role)
+    {
+    case ROLE_STATION:
+        return COLOR_PAIR(PAIR_STATION) | A_BOLD;
+    case ROLE_STATION_DARK:
+        return COLOR_PAIR(PAIR_STATION) | A_DIM;
+    case ROLE_SAT_LIT:
+        return COLOR_PAIR(PAIR_SAT_LIT) | (few_colors ? A_BOLD : A_NORMAL);
+    case ROLE_SAT_DARK:
+        return COLOR_PAIR(PAIR_SAT_DARK) | (few_colors ? A_DIM : A_NORMAL);
+    case ROLE_VECTOR:
+        return COLOR_PAIR(PAIR_VECTOR) | (few_colors ? A_DIM : A_NORMAL);
+    default:
+        return color && day_pair != 0 ? COLOR_PAIR(day_pair) : A_NORMAL;
+    }
 }
 
 attr_t palette_background(bool night)

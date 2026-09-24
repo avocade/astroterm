@@ -40,6 +40,7 @@ struct UiContext
     double wall; // Realtime seconds (for the sim clock)
     double mono; // Monotonic seconds (for toasts)
     bool has_colors;
+    int stations_count; // Stations with usable data
 };
 
 /* Apply one keypress. Returns the side effect the caller must perform

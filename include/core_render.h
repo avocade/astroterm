@@ -5,6 +5,7 @@
 #define CORE_RENDER_H
 
 #include "core.h"
+#include "satellite.h"
 #include "term.h"
 
 #include <curses.h>
@@ -25,6 +26,10 @@ void render_moon_stereo(WINDOW *win, const struct Conf *config, struct Moon moon
  */
 void render_constells(WINDOW *win, const struct Conf *config, struct Constell **constell_table, int num_const,
                       const struct Star *star_table);
+
+/* Render space stations (ISS, Tiangong) above the horizon, dimmed in shadow
+ */
+void render_stations(WINDOW *win, const struct Conf *config, const struct SatCatalog *stations);
 
 /* Render an azimuthal grid on a stereographic projection
  */

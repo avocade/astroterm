@@ -152,6 +152,18 @@ void test_help_and_escape(void)
     TEST_ASSERT_EQUAL_INT(UI_QUIT, press('q'));
 }
 
+void test_stations_toggle(void)
+{
+    config.stations = true;
+    ctx.stations_count = 2;
+    press('i');
+    TEST_ASSERT_FALSE(config.stations);
+    ctx.stations_count = 0;
+    press('i');
+    TEST_ASSERT_TRUE(config.stations);
+    TEST_ASSERT_EQUAL_STRING("Stations: no data (run once online)", ui_current_toast(&ui, ctx.mono));
+}
+
 void test_quit_on_any(void)
 {
     config.quit_on_any = true;
@@ -179,6 +191,7 @@ int main(void)
     RUN_TEST(test_rotation);
     RUN_TEST(test_arrow_keys_do_not_quit);
     RUN_TEST(test_help_and_escape);
+    RUN_TEST(test_stations_toggle);
     RUN_TEST(test_quit_on_any);
     RUN_TEST(test_toast_expires);
 

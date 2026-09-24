@@ -13,6 +13,10 @@ project_source_files += [
     files('split_lines.c'),
     files('sim_clock.c'),
     files('ui.c'),
+    files('sgp4.c'),
+    files('omm.c'),
+    files('satellite.c'),
+    files('feed.c'),
 ]
 
 # NOTE: We add main.c separately in the root Meson.build file to avoid duplicate "main" functions when compiling tests

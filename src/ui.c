@@ -23,6 +23,7 @@ enum UiCommand
     CMD_BRAILLE,
     CMD_METADATA,
     CMD_NIGHT,
+    CMD_STATIONS,
     CMD_THRESH_UP,
     CMD_THRESH_DOWN,
     CMD_PAUSE,
@@ -55,6 +56,7 @@ static const struct KeyRow key_rows[] = {
     {"b", "Braille lines", {'b'}, {CMD_BRAILLE}},
     {"m", "Metadata panel", {'m'}, {CMD_METADATA}},
     {"r", "Red night vision", {'r'}, {CMD_NIGHT}},
+    {"i", "Space stations (ISS)", {'i'}, {CMD_STATIONS}},
     {"+ -", "Faintest stars (mag)", {'+', '=', '-'}, {CMD_THRESH_UP, CMD_THRESH_UP, CMD_THRESH_DOWN}},
     {"space", "Pause time", {' '}, {CMD_PAUSE}},
     {"< >", "Speed", {'<', ',', '>'}, {CMD_SLOWER, CMD_SLOWER, CMD_FASTER}},
@@ -191,6 +193,18 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
         ui_toast(ui, ctx->mono, "Night vision: %s", on_off(config->night));
         return UI_PALETTE;
 
+    case CMD_STATIONS:
+        config->stations = !config->stations;
+        if (config->stations && ctx->stations_count == 0)
+        {
+            ui_toast(ui, ctx->mono, "Stations: no data (run once online)");
+        }
+        else
+        {
+            ui_toast(ui, ctx->mono, "Stations: %s", on_off(config->stations));
+        }
+        return UI_NONE;
+
     case CMD_THRESH_UP:
         config->threshold = MIN(THRESHOLD_MAX, config->threshold + THRESHOLD_STEP);
         ui_toast(ui, ctx->mono, "Faintest stars: mag %.1f", config->threshold);
@@ -276,6 +290,9 @@ static void state_text(enum UiCommand cmd, const struct Conf *config, const stru
         break;
     case CMD_NIGHT:
         snprintf(buf, len, "%s", on_off(config->night));
+        break;
+    case CMD_STATIONS:
+        snprintf(buf, len, "%s", on_off(config->stations));
         break;
     case CMD_THRESH_UP:
         snprintf(buf, len, "%.1f", config->threshold);

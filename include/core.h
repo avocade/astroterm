@@ -31,7 +31,9 @@ struct Conf
     bool grid;
     bool constell;
     bool metadata;
-    bool night; // Red night-vision rendering
+    bool night;    // Red night-vision rendering
+    bool stations; // ISS and Tiangong
+    bool offline;  // Never touch the network
 };
 
 // All information pertinent to rendering a celestial body
