@@ -26,6 +26,7 @@ enum UiCommand
     CMD_STATIONS,
     CMD_STARLINK,
     CMD_STARLINK_DARK,
+    CMD_VECTORS,
     CMD_THRESH_UP,
     CMD_THRESH_DOWN,
     CMD_PAUSE,
@@ -61,6 +62,7 @@ static const struct KeyRow key_rows[] = {
     {"i", "Space stations (ISS)", {'i'}, {CMD_STATIONS}},
     {"x", "Starlink", {'x'}, {CMD_STARLINK}},
     {"X", "Starlink in Earth's shadow", {'X'}, {CMD_STARLINK_DARK}},
+    {"v", "Motion vectors", {'v'}, {CMD_VECTORS}},
     {"+ -", "Faintest stars (mag)", {'+', '=', '-'}, {CMD_THRESH_UP, CMD_THRESH_UP, CMD_THRESH_DOWN}},
     {"space", "Pause time", {' '}, {CMD_PAUSE}},
     {"< >", "Speed", {'<', ',', '>'}, {CMD_SLOWER, CMD_SLOWER, CMD_FASTER}},
@@ -229,6 +231,16 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
         ui_toast(ui, ctx->mono, "Starlink in shadow: %s", config->starlink_dark ? "shown (dim)" : "hidden");
         return UI_NONE;
 
+    case CMD_VECTORS:
+        config->vectors = !config->vectors;
+        if (config->vectors)
+        {
+            ui_toast(ui, ctx->mono, "Vectors: satellites 10 s ahead, Sun/Moon/planets 1 day vs stars");
+            return UI_SATELLITES;
+        }
+        ui_toast(ui, ctx->mono, "Vectors: off");
+        return UI_NONE;
+
     case CMD_THRESH_UP:
         config->threshold = MIN(THRESHOLD_MAX, config->threshold + THRESHOLD_STEP);
         ui_toast(ui, ctx->mono, "Faintest stars: mag %.1f", config->threshold);
@@ -323,6 +335,9 @@ static void state_text(enum UiCommand cmd, const struct Conf *config, const stru
         break;
     case CMD_STARLINK_DARK:
         snprintf(buf, len, "%s", config->starlink_dark ? "shown" : "hidden");
+        break;
+    case CMD_VECTORS:
+        snprintf(buf, len, "%s", on_off(config->vectors));
         break;
     case CMD_THRESH_UP:
         snprintf(buf, len, "%.1f", config->threshold);

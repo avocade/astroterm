@@ -250,6 +250,7 @@ int main(int argc, char *argv[])
     int starlink_sunlit = 0;
     struct BrailleCanvas starlink_lit = {0};
     struct BrailleCanvas starlink_dark = {0};
+    struct BrailleCanvas vector_canvas = {0};
 
     // Terminal/System settings
     setlocale(LC_ALL, ""); // Required for unicode rendering
@@ -348,7 +349,7 @@ int main(int argc, char *argv[])
         sun_direction(julian_date, sun_dir);
         for (int i = 0; config.stations && i < stations.count; ++i)
         {
-            satellite_update(&stations.sats[i], julian_date, config.latitude, config.longitude, sun_dir, false);
+            satellite_update(&stations.sats[i], julian_date, config.latitude, config.longitude, sun_dir, config.vectors);
         }
 
         double mono_now = clock_monotonic_s();
@@ -359,7 +360,7 @@ int main(int argc, char *argv[])
             for (int i = 0; i < starlink.count; ++i)
             {
                 struct Satellite *sat = &starlink.sats[i];
-                satellite_update(sat, julian_date, config.latitude, config.longitude, sun_dir, false);
+                satellite_update(sat, julian_date, config.latitude, config.longitude, sun_dir, config.vectors);
                 if (sat->ok && sat->altitude > 0.0)
                 {
                     starlink_above++;
@@ -374,6 +375,11 @@ int main(int argc, char *argv[])
         }
 
         // Render objects, bottom layer first
+        if (config.vectors)
+        {
+            render_vectors(main_win, &config, julian_date, planet_table, &moon_object, &stations, &starlink,
+                           &vector_canvas);
+        }
         if (config.starlink)
         {
             render_starlink(main_win, &config, &starlink, &starlink_lit, &starlink_dark);
@@ -447,6 +453,10 @@ int main(int argc, char *argv[])
                 starlink_updated = -1.0e9;
                 starlink_toast = true;
             }
+            else if (action == UI_SATELLITES)
+            {
+                starlink_updated = -1.0e9;
+            }
         }
 
         // Determine time it took to update positions and render to screen
@@ -477,6 +487,7 @@ int main(int argc, char *argv[])
     satellite_catalog_free(&starlink);
     braille_canvas_free(&starlink_lit);
     braille_canvas_free(&starlink_dark);
+    braille_canvas_free(&vector_canvas);
 
     return EXIT_SUCCESS;
 }

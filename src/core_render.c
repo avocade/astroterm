@@ -1,8 +1,10 @@
 #include "core_render.h"
 #include "macros.h"
 
+#include "astro.h"
 #include "coord.h"
 #include "core.h"
+#include "core_position.h"
 #include "drawing.h"
 #include "term.h"
 
@@ -337,6 +339,152 @@ void render_starlink(WINDOW *win, const struct Conf *config, const struct SatCat
     wattron(win, lit_attr);
     braille_canvas_flush(lit, win);
     wattroff(win, lit_attr);
+}
+
+#define VECTOR_MAX_ARC (30.0 * M_PI / 180.0)
+#define BODY_LOOKAHEAD_DAYS 1.0
+
+static void horizontal_to_unit(double azimuth, double altitude, double u[3])
+{
+    u[0] = cos(altitude) * cos(azimuth);
+    u[1] = cos(altitude) * sin(azimuth);
+    u[2] = sin(altitude);
+}
+
+static void unit_to_horizontal(const double u[3], double *azimuth, double *altitude)
+{
+    *azimuth = atan2(u[1], u[0]);
+    *altitude = asin(fmax(-1.0, fmin(1.0, u[2])));
+}
+
+/* Normalised projected position (dome radius 1)
+ */
+static void project_xy(const struct Conf *config, double azimuth, double altitude, double *x, double *y)
+{
+    double radius, theta;
+    horizontal_to_polar(config, azimuth, altitude, &radius, &theta);
+    *x = radius * cos(theta);
+    *y = radius * sin(theta);
+}
+
+static void draw_vector(WINDOW *win, const struct Conf *config, double az0, double alt0, double az1, double alt1,
+                        struct BrailleCanvas *canvas)
+{
+    if (alt0 <= 0.0 || !isfinite(az1) || !isfinite(alt1))
+    {
+        return;
+    }
+
+    // Cap the arc on the sphere, before projecting
+    double u0[3], u1[3];
+    horizontal_to_unit(az0, alt0, u0);
+    horizontal_to_unit(az1, alt1, u1);
+    double arc = acos(fmax(-1.0, fmin(1.0, u0[0] * u1[0] + u0[1] * u1[1] + u0[2] * u1[2])));
+    if (arc > VECTOR_MAX_ARC)
+    {
+        double f = VECTOR_MAX_ARC / arc;
+        double s0 = sin((1.0 - f) * arc) / sin(arc);
+        double s1 = sin(f * arc) / sin(arc);
+        for (int k = 0; k < 3; ++k)
+        {
+            u1[k] = s0 * u0[k] + s1 * u1[k];
+        }
+        unit_to_horizontal(u1, &az1, &alt1);
+    }
+
+    double x0, y0, x1, y1;
+    project_xy(config, az0, alt0, &x0, &y0);
+    project_xy(config, az1, alt1, &x1, &y1);
+
+    // Clip the far end at the horizon circle
+    double dx = x1 - x0, dy = y1 - y0;
+    if (x1 * x1 + y1 * y1 > 1.0)
+    {
+        double a = dx * dx + dy * dy;
+        double b = 2.0 * (x0 * dx + y0 * dy);
+        double c = x0 * x0 + y0 * y0 - 1.0;
+        double t = (-b + sqrt(fmax(0.0, b * b - 4.0 * a * c))) / (2.0 * a);
+        x1 = x0 + t * dx;
+        y1 = y0 + t * dy;
+    }
+
+    int height, width;
+    getmaxyx(win, height, width);
+    double rad_y = (height - 1) / 2.0;
+    double rad_x = (width - 1) / 2.0;
+
+    if (config->unicode)
+    {
+        int r0 = (int)floor((rad_y - y0 * rad_y + 0.5) * 4.0);
+        int c0 = (int)floor((rad_x + x0 * rad_x + 0.5) * 2.0);
+        int r1 = (int)floor((rad_y - y1 * rad_y + 0.5) * 4.0);
+        int c1 = (int)floor((rad_x + x1 * rad_x + 0.5) * 2.0);
+        if (r0 != r1 || c0 != c1)
+        {
+            braille_canvas_line(canvas, r0, c0, r1, c1);
+        }
+    }
+    else
+    {
+        int r0 = (int)round(rad_y - y0 * rad_y), c0 = (int)round(rad_x + x0 * rad_x);
+        int r1 = (int)round(rad_y - y1 * rad_y), c1 = (int)round(rad_x + x1 * rad_x);
+        if (r0 != r1 || c0 != c1)
+        {
+            draw_line_ASCII(win, r0, c0, r1, c1);
+        }
+    }
+}
+
+void render_vectors(WINDOW *win, const struct Conf *config, double julian_date, const struct Planet *planet_table,
+                    const struct Moon *moon_object, const struct SatCatalog *stations, const struct SatCatalog *starlink,
+                    struct BrailleCanvas *canvas)
+{
+    int height, width;
+    getmaxyx(win, height, width);
+    braille_canvas_resize(canvas, height, width);
+
+    attr_t attr = palette_attr(config->night, config->color, ROLE_VECTOR, 0);
+    wattron(win, attr);
+
+    // Bodies: their position among the stars a day later, seen at today's
+    // sidereal time
+    double gmst = greenwich_mean_sidereal_time_rad(julian_date);
+    double later = julian_date + BODY_LOOKAHEAD_DAYS;
+    for (int i = SUN; i < NUM_PLANETS; ++i)
+    {
+        if (i == EARTH)
+        {
+            continue;
+        }
+        double ra, dec, az, alt;
+        planet_equatorial(planet_table, i, later, &ra, &dec);
+        equatorial_to_horizontal(ra, dec, gmst, config->latitude, config->longitude, &az, &alt);
+        draw_vector(win, config, planet_table[i].base.azimuth, planet_table[i].base.altitude, az, alt, canvas);
+    }
+    {
+        double ra, dec, az, alt;
+        moon_equatorial(moon_object, later, &ra, &dec);
+        equatorial_to_horizontal(ra, dec, gmst, config->latitude, config->longitude, &az, &alt);
+        draw_vector(win, config, moon_object->base.azimuth, moon_object->base.altitude, az, alt, canvas);
+    }
+
+    // Satellites: apparent motion over the next few seconds
+    const struct SatCatalog *catalogs[2] = {config->stations ? stations : NULL, config->starlink ? starlink : NULL};
+    for (int c = 0; c < 2; ++c)
+    {
+        for (int i = 0; catalogs[c] != NULL && i < catalogs[c]->count; ++i)
+        {
+            const struct Satellite *sat = &catalogs[c]->sats[i];
+            if (!sat->ok || (c == 1 && !sat->sunlit && !config->starlink_dark))
+            {
+                continue;
+            }
+            draw_vector(win, config, sat->azimuth, sat->altitude, sat->ahead_azimuth, sat->ahead_altitude, canvas);
+        }
+    }
+
+    braille_canvas_flush(canvas, win);
+    wattroff(win, attr);
 }
 
 int gcd(int a, int b)

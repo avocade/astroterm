@@ -1,3 +1,6 @@
+#include "core.h"
+#include "core_position.h"
+#include "data/keplerian_elements.h"
 #include "omm.h"
 #include "satellite.h"
 #include "sgp4.h"
@@ -297,6 +300,48 @@ void test_lookahead_uses_no_extra_propagation(void)
     TEST_ASSERT_DOUBLE_WITHIN(0.05 * DEG, alt, iss.ahead_altitude);
 }
 
+// Body vectors show motion against the stars
+
+static double separation(double ra0, double dec0, double ra1, double dec1)
+{
+    return acos(sin(dec0) * sin(dec1) + cos(dec0) * cos(dec1) * cos(ra1 - ra0));
+}
+
+void test_moon_drifts_east_about_13_degrees_a_day(void)
+{
+    struct Moon moon;
+    TEST_ASSERT_TRUE(generate_moon_object(&moon, &moon_elements, &moon_rates));
+
+    double jd = 2461308.0; // 2026-09-24 12:00 UTC
+    double ra0, dec0, ra1, dec1;
+    moon_equatorial(&moon, jd, &ra0, &dec0);
+    moon_equatorial(&moon, jd + 1.0, &ra1, &dec1);
+
+    double sep = separation(ra0, dec0, ra1, dec1) / DEG;
+    TEST_ASSERT_TRUE_MESSAGE(sep > 11.0 && sep < 15.5, "Moon moves 11-15 degrees a day against the stars");
+    TEST_ASSERT_TRUE(sin(ra1 - ra0) > 0.0); // Eastward: right ascension grows
+}
+
+void test_saturn_is_retrograde_before_opposition(void)
+{
+    // Saturn reaches opposition on 2026-10-04 and moves westward around it
+    struct Planet *planets = NULL;
+    TEST_ASSERT_TRUE(generate_planet_table(&planets, planet_elements, planet_rates, planet_extras));
+
+    double jd = 2461308.0;
+    double ra0, dec0, ra1, dec1;
+    planet_equatorial(planets, SATURN, jd, &ra0, &dec0);
+    planet_equatorial(planets, SATURN, jd + 1.0, &ra1, &dec1);
+    TEST_ASSERT_TRUE(sin(ra1 - ra0) < 0.0);
+
+    // ...while the Sun moves east about a degree a day
+    planet_equatorial(planets, SUN, jd, &ra0, &dec0);
+    planet_equatorial(planets, SUN, jd + 1.0, &ra1, &dec1);
+    TEST_ASSERT_DOUBLE_WITHIN(0.1, 0.99, separation(ra0, dec0, ra1, dec1) / DEG);
+    TEST_ASSERT_TRUE(sin(ra1 - ra0) > 0.0);
+    free_planets(planets, NUM_PLANETS);
+}
+
 void test_compass(void)
 {
     TEST_ASSERT_EQUAL_STRING("N", compass_point(0.0));
@@ -324,6 +369,8 @@ int main(void)
     RUN_TEST(test_shadow);
     RUN_TEST(test_stale_elements_hidden);
     RUN_TEST(test_lookahead_uses_no_extra_propagation);
+    RUN_TEST(test_moon_drifts_east_about_13_degrees_a_day);
+    RUN_TEST(test_saturn_is_retrograde_before_opposition);
     RUN_TEST(test_compass);
 
     return UNITY_END();

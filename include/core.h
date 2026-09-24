@@ -35,6 +35,7 @@ struct Conf
     bool stations;      // ISS and Tiangong
     bool starlink;      // Starlink overlay (sunlit satellites)
     bool starlink_dark; // ... also those in Earth's shadow
+    bool vectors;       // Motion vectors
     bool offline;       // Never touch the network
 };
 

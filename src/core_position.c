@@ -30,6 +30,41 @@ void update_star_positions(struct Star *star_table, int num_stars, double julian
     return;
 }
 
+void planet_equatorial(const struct Planet *planet_table, int i, double julian_date, double *right_ascension,
+                       double *declination)
+{
+    // Heliocentric coordinates of the Earth-Moon barycenter
+    double xe, ye, ze;
+    calc_planet_helio_ICRF(planet_table[EARTH].elements, planet_table[EARTH].rates, planet_table[EARTH].extras, julian_date,
+                           &xe, &ye, &ze);
+
+    // Geocentric rectangular equatorial coordinates
+    double xg, yg, zg;
+    if (i == SUN)
+    {
+        // Since the origin of the ICRF frame is the barycenter of the Solar
+        // System, (for our purposes this is roughly the position of the
+        // Sun) we obtain the geocentric coordinates of the Sun by negating
+        // the heliocentric coordinates of the Earth
+        xg = -xe;
+        yg = -ye;
+        zg = -ze;
+    }
+    else
+    {
+        calc_planet_helio_ICRF(planet_table[i].elements, planet_table[i].rates, planet_table[i].extras, julian_date, &xg,
+                               &yg, &zg);
+
+        // Obtain geocentric coordinates by subtracting Earth's coordinates
+        xg -= xe;
+        yg -= ye;
+        zg -= ze;
+    }
+
+    // Convert to spherical equatorial coordinates
+    equatorial_rectangular_to_spherical(xg, yg, zg, right_ascension, declination);
+}
+
 void update_planet_positions(struct Planet *planet_table, double julian_date, double latitude, double longitude)
 {
     double gmst = greenwich_mean_sidereal_time_rad(julian_date);
@@ -37,38 +72,8 @@ void update_planet_positions(struct Planet *planet_table, double julian_date, do
     int i;
     for (i = SUN; i < NUM_PLANETS; ++i)
     {
-        // Geocentric rectangular equatorial coordinates
-        double xg, yg, zg;
-
-        // Heliocentric coordinates of the Earth-Moon barycenter
-        double xe, ye, ze;
-        calc_planet_helio_ICRF(planet_table[EARTH].elements, planet_table[EARTH].rates, planet_table[EARTH].extras, julian_date,
-                               &xe, &ye, &ze);
-
-        if (i == SUN)
-        {
-            // Since the origin of the ICRF frame is the barycenter of the Solar
-            // System, (for our purposes this is roughly the position of the
-            // Sun) we obtain the geocentric coordinates of the Sun by negating
-            // the heliocentric coordinates of the Earth
-            xg = -xe;
-            yg = -ye;
-            zg = -ze;
-        }
-        else
-        {
-            calc_planet_helio_ICRF(planet_table[i].elements, planet_table[i].rates, planet_table[i].extras, julian_date, &xg,
-                                   &yg, &zg);
-
-            // Obtain geocentric coordinates by subtracting Earth's coordinates
-            xg -= xe;
-            yg -= ye;
-            zg -= ze;
-        }
-
-        // Convert to spherical equatorial coordinates
         double right_ascension, declination;
-        equatorial_rectangular_to_spherical(xg, yg, zg, &right_ascension, &declination);
+        planet_equatorial(planet_table, i, julian_date, &right_ascension, &declination);
 
         double azimuth, altitude;
         equatorial_to_horizontal(right_ascension, declination, gmst, latitude, longitude, &azimuth, &altitude);
@@ -78,16 +83,19 @@ void update_planet_positions(struct Planet *planet_table, double julian_date, do
     }
 }
 
+void moon_equatorial(const struct Moon *moon_object, double julian_date, double *right_ascension, double *declination)
+{
+    double xg, yg, zg;
+    calc_moon_geo_ICRF(moon_object->elements, moon_object->rates, julian_date, &xg, &yg, &zg);
+    equatorial_rectangular_to_spherical(xg, yg, zg, right_ascension, declination);
+}
+
 void update_moon_position(struct Moon *moon_object, double julian_date, double latitude, double longitude)
 {
     double gmst = greenwich_mean_sidereal_time_rad(julian_date);
 
-    double xg, yg, zg;
-    calc_moon_geo_ICRF(moon_object->elements, moon_object->rates, julian_date, &xg, &yg, &zg);
-
-    // Convert to spherical equatorial coordinates
     double right_ascension, declination;
-    equatorial_rectangular_to_spherical(xg, yg, zg, &right_ascension, &declination);
+    moon_equatorial(moon_object, julian_date, &right_ascension, &declination);
 
     double azimuth, altitude;
     equatorial_to_horizontal(right_ascension, declination, gmst, latitude, longitude, &azimuth, &altitude);

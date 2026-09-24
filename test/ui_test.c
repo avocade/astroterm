@@ -180,6 +180,15 @@ void test_starlink_toggle(void)
     TEST_ASSERT_TRUE(config.starlink_dark);
 }
 
+void test_vectors_toggle(void)
+{
+    TEST_ASSERT_EQUAL_INT(UI_SATELLITES, press('v'));
+    TEST_ASSERT_TRUE(config.vectors);
+    TEST_ASSERT_NOT_NULL(strstr(ui_current_toast(&ui, ctx.mono), "1 day vs stars"));
+    TEST_ASSERT_EQUAL_INT(UI_NONE, press('v'));
+    TEST_ASSERT_FALSE(config.vectors);
+}
+
 void test_quit_on_any(void)
 {
     config.quit_on_any = true;
@@ -209,6 +218,7 @@ int main(void)
     RUN_TEST(test_help_and_escape);
     RUN_TEST(test_stations_toggle);
     RUN_TEST(test_starlink_toggle);
+    RUN_TEST(test_vectors_toggle);
     RUN_TEST(test_quit_on_any);
     RUN_TEST(test_toast_expires);
 

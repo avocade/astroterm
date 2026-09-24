@@ -45,6 +45,15 @@ bool horizontal_to_dots(WINDOW *win, const struct Conf *config, double azimuth, 
 void render_starlink(WINDOW *win, const struct Conf *config, const struct SatCatalog *starlink,
                      struct BrailleCanvas *lit, struct BrailleCanvas *dark);
 
+/* Render motion vectors: satellites to where they will be SAT_LOOKAHEAD_SECONDS
+ * later (apparent motion), the Sun, Moon and planets to where they will be
+ * among the stars a day later (their own motion; the daily rotation every star
+ * shares is left out). Dim, beneath every glyph, capped at 30 degrees of arc
+ */
+void render_vectors(WINDOW *win, const struct Conf *config, double julian_date, const struct Planet *planet_table,
+                    const struct Moon *moon_object, const struct SatCatalog *stations, const struct SatCatalog *starlink,
+                    struct BrailleCanvas *canvas);
+
 /* Render an azimuthal grid on a stereographic projection
  */
 void render_azimuthal_grid(WINDOW *win, const struct Conf *config);
