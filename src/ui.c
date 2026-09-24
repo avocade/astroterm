@@ -300,8 +300,7 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
     return UI_NONE;
 }
 
-static void state_text(enum UiCommand cmd, const struct Conf *config, const struct SimClock *clock, char *buf,
-                       size_t len)
+static void state_text(enum UiCommand cmd, const struct Conf *config, const struct SimClock *clock, char *buf, size_t len)
 {
     buf[0] = '\0';
     switch (cmd)

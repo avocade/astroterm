@@ -31,7 +31,7 @@ struct Conf
     bool grid;
     bool constell;
     bool metadata;
-    bool night;    // Red night-vision rendering
+    bool night;         // Red night-vision rendering
     bool stations;      // ISS and Tiangong
     bool starlink;      // Starlink overlay (sunlit satellites)
     bool starlink_dark; // ... also those in Earth's shadow

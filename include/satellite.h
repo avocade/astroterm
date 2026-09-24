@@ -13,6 +13,7 @@
 #ifndef SATELLITE_H
 #define SATELLITE_H
 
+#include "macros.h"
 #include "omm.h"
 #include "sgp4.h"
 
@@ -33,10 +34,10 @@ struct Satellite
     bool usable; // Initialised without error
 
     // Updated by satellite_update()
-    bool ok;             // Position valid at the last update (propagated, age within limit)
-    double azimuth;      // Radians, from North through East
-    double altitude;     // Radians
-    bool sunlit;         // Outside Earth's shadow
+    bool ok;              // Position valid at the last update (propagated, age within limit)
+    double azimuth;       // Radians, from North through East
+    double altitude;      // Radians
+    bool sunlit;          // Outside Earth's shadow
     double ahead_azimuth; // Apparent position SAT_LOOKAHEAD_SECONDS later
     double ahead_altitude;
 };
@@ -77,8 +78,7 @@ double sun_altitude(double jd, double latitude, double longitude);
 /* Topocentric azimuth/altitude of a TEME position (km) for an observer on the
  * WGS-84 ellipsoid at sea level
  */
-void teme_to_horizontal(const double r[3], double jd, double latitude, double longitude, double *azimuth,
-                        double *altitude);
+void teme_to_horizontal(const double r[3], double jd, double latitude, double longitude, double *azimuth, double *altitude);
 
 /* True when a geocentric position (km) is outside Earth's cylindrical shadow
  */
@@ -91,8 +91,7 @@ bool satellite_propagate(const struct Satellite *sat, double jd, double r[3], do
 
 /* Update position, sunlit state and (when `ahead`) the look-ahead position
  */
-void satellite_update(struct Satellite *sat, double jd, double latitude, double longitude, const double sun_dir[3],
-                      bool ahead);
+void satellite_update(struct Satellite *sat, double jd, double latitude, double longitude, const double sun_dir[3], bool ahead);
 
 /* Number of SGP4 propagations performed so far (for cost tests)
  */
@@ -103,8 +102,8 @@ unsigned long long satellite_propagation_count(void);
  * altitude and the observer is dark counts; otherwise the geometric pass above
  * the minimum altitude
  */
-bool satellite_next_pass(const struct Satellite *sat, double jd_from, double horizon_days, double latitude,
-                         double longitude, bool visible, struct PassPrediction *out);
+bool satellite_next_pass(const struct Satellite *sat, double jd_from, double horizon_days, double latitude, double longitude,
+                         bool visible, struct PassPrediction *out);
 
 /* Eight-point compass name for an azimuth, e.g. "NW"
  */

@@ -23,8 +23,8 @@ enum OmmColumn
 };
 
 static const char *column_names[NUM_COLUMNS] = {
-    "EPOCH",          "MEAN_MOTION",       "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE",
-    "ARG_OF_PERICENTER", "MEAN_ANOMALY", "NORAD_CAT_ID", "BSTAR",
+    "EPOCH",        "MEAN_MOTION",  "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE", "ARG_OF_PERICENTER",
+    "MEAN_ANOMALY", "NORAD_CAT_ID", "BSTAR",
 };
 
 bool omm_parse_number(const char *str, size_t len, double *out)
@@ -158,9 +158,9 @@ bool omm_parse_epoch(const char *s, size_t len, double *jd_out)
 {
     // YYYY-MM-DDTHH:MM:SS[.ffffff]
     int year, month, day, hour, minute, second;
-    if (len < 19 || s[4] != '-' || s[7] != '-' || s[10] != 'T' || s[13] != ':' || s[16] != ':' ||
-        !parse_int(s, 4, &year) || !parse_int(s + 5, 2, &month) || !parse_int(s + 8, 2, &day) ||
-        !parse_int(s + 11, 2, &hour) || !parse_int(s + 14, 2, &minute) || !parse_int(s + 17, 2, &second))
+    if (len < 19 || s[4] != '-' || s[7] != '-' || s[10] != 'T' || s[13] != ':' || s[16] != ':' || !parse_int(s, 4, &year) ||
+        !parse_int(s + 5, 2, &month) || !parse_int(s + 8, 2, &day) || !parse_int(s + 11, 2, &hour) ||
+        !parse_int(s + 14, 2, &minute) || !parse_int(s + 17, 2, &second))
     {
         return false;
     }
@@ -249,10 +249,10 @@ static bool parse_row(const char **f, const size_t *l, const int *col, struct Om
     }
 
     double catnr = v[COL_NORAD_CAT_ID];
-    if (catnr < 1 || catnr > 999999999 || catnr != floor(catnr) || v[COL_ECCENTRICITY] < 0.0 ||
-        v[COL_ECCENTRICITY] >= 1.0 || v[COL_MEAN_MOTION] <= 0.0 || v[COL_MEAN_MOTION] > 20.0 ||
-        v[COL_INCLINATION] < 0.0 || v[COL_INCLINATION] > 180.0 || fabs(v[COL_RA_OF_ASC_NODE]) > 360.0 ||
-        fabs(v[COL_ARG_OF_PERICENTER]) > 360.0 || fabs(v[COL_MEAN_ANOMALY]) > 360.0 || fabs(v[COL_BSTAR]) > 1.0)
+    if (catnr < 1 || catnr > 999999999 || catnr != floor(catnr) || v[COL_ECCENTRICITY] < 0.0 || v[COL_ECCENTRICITY] >= 1.0 ||
+        v[COL_MEAN_MOTION] <= 0.0 || v[COL_MEAN_MOTION] > 20.0 || v[COL_INCLINATION] < 0.0 || v[COL_INCLINATION] > 180.0 ||
+        fabs(v[COL_RA_OF_ASC_NODE]) > 360.0 || fabs(v[COL_ARG_OF_PERICENTER]) > 360.0 || fabs(v[COL_MEAN_ANOMALY]) > 360.0 ||
+        fabs(v[COL_BSTAR]) > 1.0)
     {
         return false;
     }

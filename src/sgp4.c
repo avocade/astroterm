@@ -5,8 +5,8 @@
 #include <string.h>
 
 // WGS-72 constants, as used by NORAD when fitting TLEs
-#define SGP4_MU 398600.8                 // Earth gravitational parameter (km^3/s^2)
-#define SGP4_RADIUS_EARTH_KM 6378.135    // Equatorial radius (km)
+#define SGP4_MU 398600.8              // Earth gravitational parameter (km^3/s^2)
+#define SGP4_RADIUS_EARTH_KM 6378.135 // Equatorial radius (km)
 #define SGP4_J2 0.001082616
 #define SGP4_J3 -0.00000253881
 #define SGP4_J4 -0.00000165597
@@ -24,8 +24,8 @@ static double sgp4_xke(void)
 double sgp4_gmst(double jd_ut1)
 {
     double tut1 = (jd_ut1 - 2451545.0) / 36525.0;
-    double seconds = -6.2e-6 * tut1 * tut1 * tut1 + 0.093104 * tut1 * tut1 + (876600.0 * 3600 + 8640184.812866) * tut1 +
-                     67310.54841;
+    double seconds =
+        -6.2e-6 * tut1 * tut1 * tut1 + 0.093104 * tut1 * tut1 + (876600.0 * 3600 + 8640184.812866) * tut1 + 67310.54841;
     double gmst = fmod(seconds * (M_PI / 180.0) / 240.0, TWO_PI);
     if (gmst < 0.0)
     {

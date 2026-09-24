@@ -27,8 +27,7 @@ unsigned long long satellite_propagation_count(void)
     return propagation_count;
 }
 
-bool satellite_catalog_build(const struct OmmRecord *records, int count, const long *only, int num_only,
-                             struct SatCatalog *out)
+bool satellite_catalog_build(const struct OmmRecord *records, int count, const long *only, int num_only, struct SatCatalog *out)
 {
     out->sats = calloc(count > 0 ? count : 1, sizeof(struct Satellite));
     out->count = 0;
@@ -90,8 +89,7 @@ double sun_altitude(double jd, double latitude, double longitude)
     return alt;
 }
 
-void teme_to_horizontal(const double r[3], double jd, double latitude, double longitude, double *azimuth,
-                        double *altitude)
+void teme_to_horizontal(const double r[3], double jd, double latitude, double longitude, double *azimuth, double *altitude)
 {
     // TEME is referred to the mean equinox of date, so GMST rotates it into an
     // Earth-fixed frame (polar motion and UT1-UTC are ignored)
@@ -152,8 +150,7 @@ bool satellite_propagate(const struct Satellite *sat, double jd, double r[3], do
     return true;
 }
 
-void satellite_update(struct Satellite *sat, double jd, double latitude, double longitude, const double sun_dir[3],
-                      bool ahead)
+void satellite_update(struct Satellite *sat, double jd, double latitude, double longitude, const double sun_dir[3], bool ahead)
 {
     double r[3], v[3];
     sat->ok = satellite_propagate(sat, jd, r, v);
@@ -231,8 +228,8 @@ static double bisect(const struct Satellite *sat, double a, double b, bool a_sta
     return 0.5 * (a + b);
 }
 
-bool satellite_next_pass(const struct Satellite *sat, double jd_from, double horizon_days, double lat, double lon,
-                         bool visible, struct PassPrediction *out)
+bool satellite_next_pass(const struct Satellite *sat, double jd_from, double horizon_days, double lat, double lon, bool visible,
+                         struct PassPrediction *out)
 {
     memset(out, 0, sizeof(*out));
     out->computed_at = jd_from;

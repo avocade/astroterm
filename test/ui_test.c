@@ -34,9 +34,9 @@ void test_display_toggles_flip_and_toast(void)
         bool *field;
         const char *toast_on;
     } cases[] = {
-        {'c', &config.color, "Colors: on"},       {'C', &config.constell, "Constellations: on"},
-        {'g', &config.grid, "Grid: on"},          {'u', &config.unicode, "Unicode: on"},
-        {'m', &config.metadata, "Metadata: on"},  {'r', &config.night, "Night vision: on"},
+        {'c', &config.color, "Colors: on"},      {'C', &config.constell, "Constellations: on"},
+        {'g', &config.grid, "Grid: on"},         {'u', &config.unicode, "Unicode: on"},
+        {'m', &config.metadata, "Metadata: on"}, {'r', &config.night, "Night vision: on"},
     };
 
     for (unsigned int i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)

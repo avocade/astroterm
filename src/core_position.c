@@ -52,8 +52,8 @@ void planet_equatorial(const struct Planet *planet_table, int i, double julian_d
     }
     else
     {
-        calc_planet_helio_ICRF(planet_table[i].elements, planet_table[i].rates, planet_table[i].extras, julian_date, &xg,
-                               &yg, &zg);
+        calc_planet_helio_ICRF(planet_table[i].elements, planet_table[i].rates, planet_table[i].extras, julian_date, &xg, &yg,
+                               &zg);
 
         // Obtain geocentric coordinates by subtracting Earth's coordinates
         xg -= xe;

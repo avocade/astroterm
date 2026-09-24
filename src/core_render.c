@@ -271,8 +271,7 @@ void render_stations(WINDOW *win, const struct Conf *config, const struct SatCat
     }
 }
 
-bool horizontal_to_dots(WINDOW *win, const struct Conf *config, double azimuth, double altitude, int *dot_row,
-                        int *dot_col)
+bool horizontal_to_dots(WINDOW *win, const struct Conf *config, double azimuth, double altitude, int *dot_row, int *dot_col)
 {
     double radius, theta;
     horizontal_to_polar(config, azimuth, altitude, &radius, &theta);
@@ -295,8 +294,8 @@ bool horizontal_to_dots(WINDOW *win, const struct Conf *config, double azimuth, 
     return true;
 }
 
-void render_starlink(WINDOW *win, const struct Conf *config, const struct SatCatalog *starlink,
-                     struct BrailleCanvas *lit, struct BrailleCanvas *dark)
+void render_starlink(WINDOW *win, const struct Conf *config, const struct SatCatalog *starlink, struct BrailleCanvas *lit,
+                     struct BrailleCanvas *dark)
 {
     int height, width;
     getmaxyx(win, height, width);
@@ -326,7 +325,10 @@ void render_starlink(WINDOW *win, const struct Conf *config, const struct SatCat
         {
             // ',' rather than '.', which faint stars use
             struct ObjectBase base = {
-                .azimuth = sat->azimuth, .altitude = sat->altitude, .symbol_ASCII = ',', .symbol_unicode = ",",
+                .azimuth = sat->azimuth,
+                .altitude = sat->altitude,
+                .symbol_ASCII = ',',
+                .symbol_unicode = ",",
             };
             render_object_stereo(win, &base, config, sat->sunlit ? ROLE_SAT_LIT : ROLE_SAT_DARK);
         }
@@ -540,6 +542,10 @@ void render_azimuthal_grid(WINDOW *win, const struct Conf *config)
     // Sort grid angles in the first quadrant by rendering priority
     int number_angles = 90 / inc + 1;
     int *angles = malloc(number_angles * sizeof(int));
+    if (angles == NULL)
+    {
+        return;
+    }
 
     for (int i = 0; i < number_angles; ++i)
     {
@@ -573,6 +579,10 @@ void render_azimuthal_grid(WINDOW *win, const struct Conf *config)
 
             int str_len = snprintf(NULL, 0, "%d", angle);
             char *label = malloc(str_len + 1);
+            if (label == NULL)
+            {
+                continue;
+            }
 
             snprintf(label, str_len + 1, "%d", angle);
 

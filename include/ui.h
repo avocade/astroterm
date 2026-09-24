@@ -22,8 +22,8 @@ enum UiAction
 {
     UI_NONE = 0,
     UI_QUIT,
-    UI_LAYOUT,  // A window appeared or disappeared: re-layout and clear
-    UI_PALETTE,  // Colors changed: re-apply the palette
+    UI_LAYOUT,     // A window appeared or disappeared: re-layout and clear
+    UI_PALETTE,    // Colors changed: re-apply the palette
     UI_STARLINK,   // Starlink turned on: update now and report counts
     UI_SATELLITES, // Satellite state needs recomputing now (e.g. vectors on)
 };

@@ -35,15 +35,14 @@ void render_stations(WINDOW *win, const struct Conf *config, const struct SatCat
 /* Project a horizontal position to fractional braille-dot coordinates (4 dot
  * rows and 2 dot columns per cell). Returns false outside the dome
  */
-bool horizontal_to_dots(WINDOW *win, const struct Conf *config, double azimuth, double altitude, int *dot_row,
-                        int *dot_col);
+bool horizontal_to_dots(WINDOW *win, const struct Conf *config, double azimuth, double altitude, int *dot_row, int *dot_col);
 
 /* Render Starlink satellites above the horizon as single braille dots (Unicode)
  * or ',' (ASCII). Sunlit ones always; eclipsed ones when starlink_dark is on.
  * Drawn first, so every other layer covers them
  */
-void render_starlink(WINDOW *win, const struct Conf *config, const struct SatCatalog *starlink,
-                     struct BrailleCanvas *lit, struct BrailleCanvas *dark);
+void render_starlink(WINDOW *win, const struct Conf *config, const struct SatCatalog *starlink, struct BrailleCanvas *lit,
+                     struct BrailleCanvas *dark);
 
 /* Render motion vectors: satellites to where they will be SAT_LOOKAHEAD_SECONDS
  * later (apparent motion), the Sun, Moon and planets to where they will be

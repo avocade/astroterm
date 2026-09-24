@@ -18,13 +18,13 @@ enum RenderRole
     ROLE_BODY,        // Sun, Moon, planets
     ROLE_STAR,
     ROLE_LABEL,
-    ROLE_LINE,          // Constellation figures, grid
-    ROLE_UI,            // Cardinal letters, panel, toasts, help
-    ROLE_STATION,       // ISS, Tiangong in sunlight
-    ROLE_STATION_DARK,  // ... in Earth's shadow
-    ROLE_SAT_LIT,       // Starlink in sunlight
-    ROLE_SAT_DARK,      // ... in Earth's shadow
-    ROLE_VECTOR,        // Motion vectors
+    ROLE_LINE,         // Constellation figures, grid
+    ROLE_UI,           // Cardinal letters, panel, toasts, help
+    ROLE_STATION,      // ISS, Tiangong in sunlight
+    ROLE_STATION_DARK, // ... in Earth's shadow
+    ROLE_SAT_LIT,      // Starlink in sunlight
+    ROLE_SAT_DARK,     // ... in Earth's shadow
+    ROLE_VECTOR,       // Motion vectors
 };
 
 /* Initialize ncurses.h

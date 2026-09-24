@@ -173,8 +173,14 @@ void test_sgp4_matches_reference(void)
 void test_deep_space_rejected(void)
 {
     struct Sgp4Elements geo = {
-        .epoch_jd = 2461308.0, .bstar = 0.0, .ecco = 0.0002, .inclo = 0.1 * DEG, .nodeo = 0.0, .argpo = 0.0,
-        .mo = 0.0, .no_kozai = 1.0027 * 2.0 * M_PI / 1440.0, // ~1 rev/day
+        .epoch_jd = 2461308.0,
+        .bstar = 0.0,
+        .ecco = 0.0002,
+        .inclo = 0.1 * DEG,
+        .nodeo = 0.0,
+        .argpo = 0.0,
+        .mo = 0.0,
+        .no_kozai = 1.0027 * 2.0 * M_PI / 1440.0, // ~1 rev/day
     };
     struct Sgp4State state;
     TEST_ASSERT_EQUAL_INT(SGP4_ERR_DEEP_SPACE, sgp4_init(&state, &geo));
@@ -259,9 +265,9 @@ void test_shadow(void)
 {
     double sun[3] = {1.0, 0.0, 0.0};
     double day[3] = {6928.0, 0.0, 0.0};
-    double night[3] = {-6928.0, 0.0, 0.0};       // 550 km on the anti-solar line
-    double beside[3] = {-6928.0, 6500.0, 0.0};   // Behind Earth but outside the cylinder
-    double terminator[3] = {0.0, 0.0, 6928.0};   // Over the pole at the terminator
+    double night[3] = {-6928.0, 0.0, 0.0};     // 550 km on the anti-solar line
+    double beside[3] = {-6928.0, 6500.0, 0.0}; // Behind Earth but outside the cylinder
+    double terminator[3] = {0.0, 0.0, 6928.0}; // Over the pole at the terminator
     TEST_ASSERT_TRUE(is_sunlit(day, sun));
     TEST_ASSERT_FALSE(is_sunlit(night, sun));
     TEST_ASSERT_TRUE(is_sunlit(beside, sun));

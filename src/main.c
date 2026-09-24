@@ -4,10 +4,10 @@
 #include "core_render.h"
 #include "data/keplerian_elements.h"
 #include "feed.h"
-#include "omm.h"
-#include "satellite.h"
 #include "macros.h"
+#include "omm.h"
 #include "parse_BSC5.h"
+#include "satellite.h"
 #include "sim_clock.h"
 #include "stopwatch.h"
 #include "term.h"
@@ -162,8 +162,8 @@ static void iss_status(const struct SatCatalog *stations, const struct Conf *con
     }
     char when[32];
     format_local_time(pass.start_jd, jd, when, sizeof(when));
-    snprintf(buf, len, "ISS %s %s, max %.0f°%s", when, compass_point(pass.start_azimuth),
-             pass.peak_altitude * 180.0 / M_PI, light);
+    snprintf(buf, len, "ISS %s %s, max %.0f°%s", when, compass_point(pass.start_azimuth), pass.peak_altitude * 180.0 / M_PI,
+             light);
 }
 
 int main(int argc, char *argv[])
@@ -377,8 +377,7 @@ int main(int argc, char *argv[])
         // Render objects, bottom layer first
         if (config.vectors)
         {
-            render_vectors(main_win, &config, julian_date, planet_table, &moon_object, &stations, &starlink,
-                           &vector_canvas);
+            render_vectors(main_win, &config, julian_date, planet_table, &moon_object, &stations, &starlink, &vector_canvas);
         }
         if (config.starlink)
         {
@@ -536,10 +535,10 @@ void parse_options(int argc, char *argv[], struct Conf *config)
 #include "arg_definitions.h"
     struct arg_end *end = arg_end(20);
 
-    void *argtable[] = {latitude_arg, longitude_arg, datetime_arg,    threshold_arg, label_arg,   fps_arg,  speed_arg,
-                        color_arg,    constell_arg,  grid_arg,        unicode_arg,   braille_arg, quit_arg, meta_arg,
-                        ratio_arg,    help_arg,      completions_arg, city_arg,      version_arg, night_arg,
-                        offline_arg,  starlink_arg,  end};
+    void *argtable[] = {
+        latitude_arg,    longitude_arg, datetime_arg, threshold_arg, label_arg,   fps_arg,      speed_arg, color_arg,
+        constell_arg,    grid_arg,      unicode_arg,  braille_arg,   quit_arg,    meta_arg,     ratio_arg, help_arg,
+        completions_arg, city_arg,      version_arg,  night_arg,     offline_arg, starlink_arg, end};
 
     int nerrors = arg_parse(argc, argv, argtable);
 

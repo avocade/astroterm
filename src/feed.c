@@ -75,8 +75,7 @@ bool feed_cache_dir(char *buf, size_t len)
 static bool feed_file(enum FeedId id, const char *suffix, char *buf, size_t len)
 {
     char dir[PATH_LEN];
-    return feed_cache_dir(dir, sizeof(dir)) &&
-           snprintf(buf, len, "%s/%s%s", dir, feed_names[id], suffix) < (int)len;
+    return feed_cache_dir(dir, sizeof(dir)) && snprintf(buf, len, "%s/%s%s", dir, feed_names[id], suffix) < (int)len;
 }
 
 static double file_age_hours(const char *path)
@@ -221,10 +220,28 @@ static enum FetchResult run_curl(const char *url, const char *tmp_path, int *htt
 
     // -q first: ignore ~/.curlrc. HTTPS only, even across redirects. The body
     // goes to the temporary file, the status code to our pipe
-    char *argv[] = {curl,           "-q",           "-sS",       "-L",          "--proto",          "=https",
-                    "--proto-redir", "=https",      "--max-filesize", "20000000", "--connect-timeout", "5",
-                    "--max-time",   "60",           "-A",        "astroterm",   "-o",               (char *)tmp_path,
-                    "-w",           "%{http_code}", (char *)url, NULL};
+    char *argv[] = {curl,
+                    "-q",
+                    "-sS",
+                    "-L",
+                    "--proto",
+                    "=https",
+                    "--proto-redir",
+                    "=https",
+                    "--max-filesize",
+                    "20000000",
+                    "--connect-timeout",
+                    "5",
+                    "--max-time",
+                    "60",
+                    "-A",
+                    "astroterm",
+                    "-o",
+                    (char *)tmp_path,
+                    "-w",
+                    "%{http_code}",
+                    (char *)url,
+                    NULL};
 
     posix_spawn_file_actions_t actions;
     posix_spawn_file_actions_init(&actions);
