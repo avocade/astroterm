@@ -1,8 +1,8 @@
 ## ADDED Requirements
 
 ### Requirement: Look-ahead motion vectors
-When motion vectors are on (`v` key, `--vectors` flag; off by default), each Sun, Moon, planet, space station
-and visible Starlink satellite above the horizon SHALL be drawn with a line from its current screen position to its
+The application SHALL offer motion vectors (`v` key, `--vectors` flag; off by default). While they are on, the Sun,
+the Moon, each planet, space station and visible Starlink satellite above the horizon SHALL be drawn with a line from its current screen position to its
 projected position after a look-ahead interval: **1 hour** of simulation time for the Sun, Moon and planets, and
 **30 seconds** for satellites. The line length therefore encodes apparent angular speed within each group.
 

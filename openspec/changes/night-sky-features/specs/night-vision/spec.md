@@ -1,9 +1,9 @@
 ## ADDED Requirements
 
 ### Requirement: Red-on-black rendering
-When night vision is on, every glyph the application draws (stars, planets, Moon, labels, constellation lines and
-names, grid, cardinal letters, space stations, Starlink dots, metadata panel, help modal, toasts) SHALL use a red
-foreground on a black background, including the area outside the square sky window. No other hue SHALL appear.
+The application SHALL draw every glyph in red on black while night vision is on: stars, planets, Moon, labels,
+constellation lines and names, grid, cardinal letters, space stations, Starlink dots, metadata panel, help modal
+and toasts, including the area outside the square sky window. No other hue SHALL appear.
 
 #### Scenario: Starlink is red, not blue
 - **WHEN** night vision and the Starlink overlay are both on
