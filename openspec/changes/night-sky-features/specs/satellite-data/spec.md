@@ -1,45 +1,47 @@
 ## ADDED Requirements
 
-### Requirement: Local TLE cache
-Satellite data SHALL be read from a per-user cache directory: `$ASTROTERM_CACHE_DIR` if set, else
-`$XDG_CACHE_HOME/astroterm`, else `~/.cache/astroterm` (Windows: `%LOCALAPPDATA%\astroterm`). Feeds SHALL be stored
-as `stations.tle` and `starlink.tle`. Cached data of any age SHALL be used when nothing fresher is available.
+### Requirement: Local cache
+Satellite feeds SHALL be stored in `$XDG_CACHE_HOME/astroterm` (absolute paths only), else `~/.cache/astroterm`,
+created with mode 0700, as `stations.csv` and `starlink.csv`. Cached data of any age SHALL be used when nothing
+fresher is available.
 
-#### Scenario: Offline with old cache
-- **WHEN** the device has no network and `starlink.tle` is 5 days old
-- **THEN** Starlink is drawn from the 5-day-old data and the toast notes the data age
+#### Scenario: Offline with an old cache
+- **WHEN** there is no network and `starlink.csv` is 5 days old
+- **THEN** Starlink is drawn from it and the launch toast notes "data 5 d old"
 
-### Requirement: Background refresh
-When a satellite layer is enabled and its feed's cache is missing or older than 12 hours, the application SHALL
-refresh it from CelesTrak (`https://celestrak.org/NORAD/elements/gp.php?GROUP=<stations|starlink>&FORMAT=tle`) by
-spawning `curl` as a child process, without a shell, writing to a temporary file and atomically renaming it into
-place only after the download succeeds and parses to at least one valid set. The render loop SHALL NOT block
-on the download; the new data SHALL be loaded when the child exits. At most one download per feed SHALL be in
-flight, and a failed feed SHALL NOT be retried for 15 minutes.
+### Requirement: Refresh before the UI starts
+At launch, if a satellite layer is on and `--offline` is not given, each feed older than 12 hours SHALL be
+refreshed from `https://celestrak.org/NORAD/elements/gp.php?GROUP=<stations|starlink>&FORMAT=csv` before curses
+starts, by running `curl` without a shell into a unique temporary file, unless an attempt for that feed was made
+in the last 2 hours. The download SHALL replace the feed only on HTTP 200 with at least one valid row and at least
+half the previous row count. HTTP 403 SHALL be reported as "CelesTrak: not updated yet" and leave the cache as is.
 
-#### Scenario: First run
-- **WHEN** Starlink is enabled with no cache and the network is up
-- **THEN** the sky keeps animating, a toast shows "Starlink: downloading…", and the dots appear when the download finishes
+#### Scenario: First run online
+- **WHEN** stations are on, there is no cache and the network is up
+- **THEN** both feeds are downloaded before the first frame
 
 #### Scenario: Truncated download
-- **WHEN** the download is cut off and the file parses to zero valid sets
-- **THEN** the previous cache file is kept unchanged
+- **WHEN** the download yields 3,000 rows and the cache holds 10,000
+- **THEN** the cache is kept and the toast reports the failed refresh
+
+#### Scenario: Rate limited
+- **WHEN** CelesTrak answers 403
+- **THEN** the cache is kept and no new attempt is made for 2 hours
 
 #### Scenario: curl missing
 - **WHEN** `curl` is not on `PATH`
-- **THEN** the toast reports "Starlink: curl not found" and the application keeps running
+- **THEN** the application starts normally and the toast reports "curl not found"
 
 ### Requirement: Offline mode
-`--offline` (`-O`) SHALL prevent every network access; satellite layers then use the cache only.
+`--offline` SHALL prevent every network access.
 
 #### Scenario: Offline flag
 - **WHEN** astroterm runs with `--offline` and no cache
-- **THEN** no child process is spawned and satellite layers report "no data"
+- **THEN** no process is spawned and satellite layers report "no data"
 
-### Requirement: Network only for enabled layers
-The application SHALL NOT contact the network for a feed whose layer is off. Starlink is off by default; stations
-are on by default.
+### Requirement: Network only for satellite layers
+The application SHALL NOT contact the network when all satellite layers are off at launch.
 
-#### Scenario: Default launch
-- **WHEN** astroterm starts without `--starlink` and with a fresh stations cache
+#### Scenario: Stations off
+- **WHEN** astroterm starts with stations off (`i` pressed later does not trigger a download)
 - **THEN** no network request is made

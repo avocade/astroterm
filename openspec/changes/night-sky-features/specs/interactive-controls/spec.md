@@ -1,28 +1,28 @@
 ## ADDED Requirements
 
 ### Requirement: Live display toggles
-The application SHALL toggle each display option at runtime from a single keypress, with the change visible on
-the next frame and without restarting. CLI flags SHALL set only the initial state.
+The application SHALL toggle each display option at runtime from a single keypress, visible on the next frame and
+without restarting. CLI flags SHALL set only the initial state. One table SHALL define each key, its help row and
+its toast text.
 
 | Key | Effect |
 |-----|--------|
-| `c` | terminal colors on/off |
+| `c` | day colors on/off |
 | `C` | constellation figures on/off |
-| `N` | constellation names on/off |
 | `g` | azimuthal grid on/off (cardinal letters when off) |
 | `u` | Unicode glyphs on/off |
-| `b` | braille constellation lines on/off (only takes effect while Unicode is on) |
+| `b` | braille constellation lines on/off (needs Unicode) |
 | `m` | metadata panel on/off |
-| `r` | red night-vision filter on/off |
+| `r` | red night vision on/off |
 | `i` | space stations (ISS, Tiangong) on/off |
 | `x` | Starlink overlay on/off |
-| `X` | Starlink "sunlit only" filter on/off |
+| `X` | also show Starlinks in Earth's shadow (dimmed) |
 | `v` | motion vectors on/off |
-| `+` / `=` | show fainter stars (magnitude threshold +0.5, max 8.0) |
-| `-` | show fewer stars (magnitude threshold -0.5, min -1.5) |
-| `space`, `>` / `.`, `<` / `,`, `n` | time controls (see sim-clock) |
+| `+`/`=`, `-` | magnitude threshold ±0.5 (bounded −1.5 … 8.0) |
+| `space`, `>`/`.`, `<`/`,`, `n` | pause, faster, slower, now (see sim-clock) |
+| `←`, `→`, `↓` | rotate the dome 15° left/right, reset |
 | `?` | help modal |
-| `q`, `ESC` | quit (ESC closes the help modal first when it is open) |
+| `q`, `ESC` | quit (`ESC` closes the help modal first) |
 
 #### Scenario: Toggle constellations live
 - **WHEN** astroterm runs without `-C` and the user presses `C`
@@ -30,49 +30,53 @@ the next frame and without restarting. CLI flags SHALL set only the initial stat
 
 #### Scenario: Flags set the initial state
 - **WHEN** astroterm starts with `-g` and the user presses `g`
-- **THEN** the grid disappears and cardinal direction letters are shown
+- **THEN** the grid disappears and cardinal letters are shown
 
 #### Scenario: Braille without Unicode
 - **WHEN** Unicode is off and the user presses `b`
-- **THEN** the braille setting is stored and a toast reports that braille needs Unicode (`u`)
+- **THEN** the setting is stored and the toast says braille needs Unicode (`u`)
 
 #### Scenario: Threshold bounds
-- **WHEN** the magnitude threshold is 8.0 and the user presses `+`
-- **THEN** the threshold stays at 8.0
+- **WHEN** the threshold is 8.0 and the user presses `+`
+- **THEN** the threshold stays 8.0
 
 #### Scenario: Quit-on-any preserved
 - **WHEN** astroterm runs with `--quit-on-any`
-- **THEN** every keypress quits, exactly as before
+- **THEN** every keypress quits, as before
 
 ### Requirement: Help modal
-Pressing `?` SHALL open a centered, bordered overlay listing every key and its current state (on/off/value). The
-sky SHALL keep animating behind it. `?` or `ESC` SHALL close it. Pressing any other key while it is open SHALL
-still perform that key's action and keep the modal open, so the listed state updates in place.
+Pressing `?` SHALL open a centered, bordered overlay listing every key and its current state. The sky SHALL keep
+animating behind it. `?` or `ESC` SHALL close it; other keys SHALL act and keep it open so the state updates in
+place. On a terminal too small for it, the modal SHALL be clipped without crashing.
 
 #### Scenario: Open and close
 - **WHEN** the user presses `?` and then `ESC`
-- **THEN** the modal appears, and then disappears without quitting the application
+- **THEN** the modal appears and then disappears without quitting
 
 #### Scenario: State shown live
 - **WHEN** the modal is open and the user presses `x`
-- **THEN** the Starlink row changes from "off" to "on" in the modal
+- **THEN** the Starlink row changes from "off" to "on"
 
-#### Scenario: Small terminal
-- **WHEN** the terminal is too small to fit the modal
-- **THEN** the modal is clipped to the screen without crashing, and a one-line "? help: enlarge terminal" hint is shown if even the title will not fit
-
-### Requirement: Toast feedback
-Every key action SHALL show a one-line toast at the bottom of the screen describing the new state (for example
-"Starlink: on, 10,687 sats" or "Speed: 60x"). The toast SHALL disappear after 2 seconds of wall-clock time.
+### Requirement: Toasts
+Each key action SHALL show a one-line toast in the bottom-left corner for 2 seconds of monotonic time. On launch
+the toast SHALL report satellite data problems or data age if any, else warn "Location 0°, 0°: use -i <city> or
+-a/-o" when no location was given, else read "? for keys".
 
 #### Scenario: Toast expires
 - **WHEN** the user presses `g`
-- **THEN** a toast reading "Grid: on" appears and is gone 2 seconds later
+- **THEN** "Grid: on" appears and is gone 2 seconds later
 
 ### Requirement: Arrow and function keys never quit
-Multi-byte key sequences (arrows, function keys) SHALL be decoded as single keys and SHALL NOT be interpreted as
-`ESC`. A lone `ESC` SHALL still be recognised within 100 ms.
+Multi-byte key sequences SHALL be decoded as single keys and SHALL NOT be taken as `ESC`. A lone `ESC` SHALL
+still register within 100 ms on ncurses.
 
 #### Scenario: Arrow key
 - **WHEN** the user presses the up arrow
 - **THEN** the application keeps running
+
+### Requirement: Face the sky
+`←`/`→` SHALL rotate the whole dome (objects, lines, grid, cardinal letters) by 15° per press; `↓` SHALL reset.
+
+#### Scenario: Facing south
+- **WHEN** the user presses `→` twelve times
+- **THEN** "S" is at the top of the dome and "N" at the bottom

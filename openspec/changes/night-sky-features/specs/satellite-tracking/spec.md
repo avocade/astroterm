@@ -1,79 +1,78 @@
 ## ADDED Requirements
 
-### Requirement: TLE parsing
-The parser SHALL accept NORAD two-line element sets with an optional name line, validate each line's length
-(≥ 69 columns), line numbers, matching catalog numbers and the modulo-10 checksum, and SHALL skip (not abort on)
-invalid sets. Satellite names SHALL be reduced to printable ASCII and trimmed, so no terminal control sequence
-from the data can reach the screen.
+### Requirement: OMM parsing
+The parser SHALL read CelesTrak OMM CSV by header name (column order free, quoted fields allowed), convert numbers
+independently of the process locale, accept 6-digit and larger catalog numbers, and skip (not abort on) rows that
+are malformed or out of range (eccentricity outside [0, 1), mean motion outside (0, 20] rev/day, non-finite
+values, unparseable epoch). Object names SHALL NOT be displayed.
 
-#### Scenario: Valid 3LE
-- **WHEN** the ISS 3-line set is parsed
-- **THEN** one satellite with catalog number 25544 and name "ISS (ZARYA)" is produced
+#### Scenario: Six-digit catalog number
+- **WHEN** a row with `NORAD_CAT_ID` 100465 is parsed
+- **THEN** one satellite with catalog number 100465 is produced
 
-#### Scenario: Bad checksum
-- **WHEN** a set's line 1 checksum digit is wrong
-- **THEN** that set is skipped and the rest of the file still loads
+#### Scenario: Comma locale
+- **WHEN** the process locale is `sv_SE.UTF-8` and the ISS row is parsed
+- **THEN** the inclination is 51.6318°, not 51°
 
-#### Scenario: Hostile name
-- **WHEN** a name line contains `ESC[2J`
-- **THEN** the stored name contains no ESC byte
+#### Scenario: Garbage row
+- **WHEN** a row has `ECCENTRICITY` "nan" or a missing epoch
+- **THEN** that row is skipped and the others load
 
 ### Requirement: SGP4 propagation
-Satellite positions SHALL be computed with the SGP4 near-Earth model (WGS-72 constants, Vallado 2006 revision).
-Results SHALL match the reference implementation (python-sgp4) to within 10 m in position for tested sets over
-±3 days from epoch. Sets with an orbital period ≥ 225 minutes (deep space) SHALL be marked unsupported and not
-drawn. A propagation error (decay, eccentricity out of range) SHALL hide that satellite, not crash.
+Positions SHALL be computed with the near-Earth SGP4 model (WGS-72, Vallado revision, opsmode "i"). Position and
+velocity SHALL match python-sgp4 to 1 m and 1 mm/s for the live sets and for every near-Earth case of Vallado's
+`SGP4-VER.TLE`, including its error codes. Orbits with a period of 225 minutes or more SHALL be rejected and not
+drawn. Any propagation error or non-finite output SHALL hide that satellite.
 
-#### Scenario: Matches reference
-- **WHEN** the ISS set is propagated to +1440 minutes
-- **THEN** the TEME position is within 10 m of the reference value
+#### Scenario: Matches the reference
+- **WHEN** the ISS elements are propagated to +1440 minutes
+- **THEN** the TEME position is within 1 m of python-sgp4
 
-#### Scenario: Deep-space set
-- **WHEN** a geostationary set is loaded
-- **THEN** it is marked unsupported and never rendered
+#### Scenario: Vallado error case
+- **WHEN** Vallado case 28872 is propagated past its decay
+- **THEN** the same error code as the reference is returned
 
 ### Requirement: Topocentric position
-Each satellite's azimuth and altitude SHALL be computed from its TEME position, Greenwich sidereal time and the
-observer's geodetic position on the WGS-84 ellipsoid (including parallax). Results SHALL agree with Skyfield to
-within 0.1° for the tested cases.
+Altitude and azimuth SHALL be computed from TEME position, IAU-82 GMST and the observer's WGS-84 position,
+agreeing with Skyfield to 0.05° for the tested instants.
 
-#### Scenario: Parallax matters
-- **WHEN** the ISS is overhead one observer
-- **THEN** an observer 1,000 km away sees it well below the zenith
+#### Scenario: Parallax
+- **WHEN** the ISS is at a tested instant above Stockholm
+- **THEN** altitude and azimuth match Skyfield to 0.05°
 
-### Requirement: Sunlit state
-Each satellite SHALL be classified as sunlit or in Earth's shadow using a cylindrical shadow model and the Sun
-position the application already computes.
+### Requirement: Sunlit state and element age
+Each satellite SHALL be classified sunlit or eclipsed with a cylindrical Earth shadow. Sets whose element age
+exceeds 14 days SHALL be hidden, and the launch toast SHALL name the data age.
 
 #### Scenario: Midnight shadow
-- **WHEN** a satellite lies directly between the Earth's center and the anti-solar point at 550 km altitude
-- **THEN** it is classified as eclipsed
+- **WHEN** a satellite at 550 km lies on the anti-solar line
+- **THEN** it is eclipsed
+
+#### Scenario: Before launch
+- **WHEN** `--datetime` is 30 days before the element epochs
+- **THEN** no satellites are drawn and the toast says the data does not cover that date
 
 ### Requirement: Space station markers
-The ISS (25544) and Tiangong (48274) SHALL be drawn when above the horizon, like planets: labeled ("ISS",
-"Tiangong"), in a distinct color, with a distinct glyph (`⌖` in Unicode, `#` in ASCII), drawn above stars.
-When in Earth's shadow they SHALL be drawn dimmed. They SHALL be on by default and toggled with `i`.
-
-#### Scenario: ISS overhead
-- **WHEN** the ISS is at altitude 40° for the observer
-- **THEN** the ISS marker and label are drawn at that position
+The ISS (25544) and Tiangong (48274) SHALL be drawn above the horizon like planets: labeled "ISS"/"Tiangong", a
+distinct glyph (`⌖` Unicode, `#` ASCII) and color, above stars and planets, dimmed while eclipsed. On by default;
+`i` toggles.
 
 #### Scenario: No data
-- **WHEN** no station TLEs are available (offline, empty cache)
-- **THEN** nothing is drawn and pressing `i` shows the toast "Stations: no data (offline?)"
+- **WHEN** no station data is available
+- **THEN** nothing is drawn and `i` shows "Stations: no data (run once online)"
 
 ### Requirement: Next ISS pass
-The metadata panel SHALL show one ISS line: "ISS: up now, <alt>° <compass>" while the ISS is above 10°, or
-"ISS: next visible <local HH:MM>, max <alt>°" for the next pass within 72 hours in which the ISS is sunlit, above
-10° and the Sun is below -6°, or "ISS: no visible pass in 72 h". A prediction SHALL be cached and reused while simulation time stays between the
-instant it was computed and the end of the predicted pass. It SHALL be recomputed when simulation time leaves
-that window (including time jumps and reverse travel) or the station data changes, and at most twice per
-wall-clock second.
+While stations are on, a line in the bottom-left corner SHALL read "ISS up: 34° NW" (with "in shadow" when
+eclipsed) while the ISS is above 10°, otherwise "ISS 21:43 WSW, max 67°" (local time, with the weekday when not
+today) for the next visible pass within 72 hours, otherwise "ISS: no visible pass in 72 h". The geometric pass
+(rise, culmination, set above 10°) SHALL match Skyfield `find_events` to 20 s and 0.5°. Predictions SHALL be cached
+while simulation time stays between the computation instant and the end of the predicted pass, and recomputed at
+most twice per wall second.
+
+#### Scenario: Matches Skyfield
+- **WHEN** passes for the tested ISS elements over Stockholm are computed geometrically
+- **THEN** each rise, culmination and set matches Skyfield within 20 s, and peak altitude within 0.5°
 
 #### Scenario: Fast-forward stays cheap
 - **WHEN** time runs at 3600x for one minute
-- **THEN** no more than 120 pass predictions are computed
-
-#### Scenario: Upcoming pass
-- **WHEN** the next qualifying pass starts at 21:43 local time with culmination 67°
-- **THEN** the panel shows "ISS: next visible 21:43, max 67°"
+- **THEN** no more than 120 predictions are computed
