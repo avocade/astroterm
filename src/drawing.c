@@ -279,7 +279,7 @@ void clear_braille_lines(void)
 
 void draw_braille_cell(WINDOW *win, int y, int x, unsigned char mask)
 {
-    if (mask == 0)
+    if (mask == 0 || y < 0 || y >= MAX_ROWS || x < 0 || x >= MAX_COLS)
         return;
 
     mask |= braille_layer[y][x];
@@ -383,6 +383,103 @@ void draw_line_braille(WINDOW *win, int ya, int xa, int yb, int xb)
     }
 
     draw_braille_cell(win, curs_ya, curs_xa, braille_mask);
+}
+
+static const unsigned char braille_dot_bits[4][2] = {{0x01, 0x08}, {0x02, 0x10}, {0x04, 0x20}, {0x40, 0x80}};
+
+bool braille_canvas_resize(struct BrailleCanvas *canvas, int rows, int cols)
+{
+    if (rows != canvas->rows || cols != canvas->cols || canvas->mask == NULL)
+    {
+        free(canvas->mask);
+        canvas->rows = rows > 0 ? rows : 0;
+        canvas->cols = cols > 0 ? cols : 0;
+        canvas->mask = calloc((size_t)canvas->rows * canvas->cols + 1, 1);
+        return canvas->mask != NULL;
+    }
+    braille_canvas_clear(canvas);
+    return true;
+}
+
+void braille_canvas_clear(struct BrailleCanvas *canvas)
+{
+    if (canvas->mask != NULL)
+    {
+        memset(canvas->mask, 0, (size_t)canvas->rows * canvas->cols);
+    }
+}
+
+void braille_canvas_free(struct BrailleCanvas *canvas)
+{
+    free(canvas->mask);
+    canvas->mask = NULL;
+    canvas->rows = canvas->cols = 0;
+}
+
+void braille_canvas_dot(struct BrailleCanvas *canvas, int dot_row, int dot_col)
+{
+    if (canvas->mask == NULL || dot_row < 0 || dot_col < 0)
+    {
+        return;
+    }
+    int row = dot_row / 4;
+    int col = dot_col / 2;
+    if (row >= canvas->rows || col >= canvas->cols)
+    {
+        return;
+    }
+    canvas->mask[row * canvas->cols + col] |= braille_dot_bits[dot_row % 4][dot_col % 2];
+}
+
+void braille_canvas_line(struct BrailleCanvas *canvas, int row_a, int col_a, int row_b, int col_b)
+{
+    int dx = abs(col_b - col_a);
+    int dy = -abs(row_b - row_a);
+    int sx = col_a < col_b ? 1 : -1;
+    int sy = row_a < row_b ? 1 : -1;
+    int err = dx + dy;
+
+    // Bresenham; bounded by the line length so bad input cannot spin
+    for (int steps = 0; steps <= dx - dy; ++steps)
+    {
+        braille_canvas_dot(canvas, row_a, col_a);
+        if (row_a == row_b && col_a == col_b)
+        {
+            break;
+        }
+        int e2 = 2 * err;
+        if (e2 >= dy)
+        {
+            err += dy;
+            col_a += sx;
+        }
+        if (e2 <= dx)
+        {
+            err += dx;
+            row_a += sy;
+        }
+    }
+}
+
+void braille_canvas_flush(const struct BrailleCanvas *canvas, WINDOW *win)
+{
+    if (canvas->mask == NULL)
+    {
+        return;
+    }
+    for (int row = 0; row < canvas->rows; ++row)
+    {
+        for (int col = 0; col < canvas->cols; ++col)
+        {
+            unsigned char mask = canvas->mask[row * canvas->cols + col];
+            if (mask == 0)
+            {
+                continue;
+            }
+            char utf8[4] = {(char)0xE2, (char)(0xA0 | (mask >> 6)), (char)(0x80 | (mask & 0x3F)), '\0'};
+            mvwaddstr(win, row, col, utf8);
+        }
+    }
 }
 
 enum FillType

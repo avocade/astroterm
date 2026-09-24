@@ -49,6 +49,37 @@ void clear_braille_lines(void);
  */
 void draw_line_braille(WINDOW *win, int ya, int xa, int yb, int xb);
 
+/* A layer of braille dots (2x4 per terminal cell) with its own mask, so layers
+ * never merge into or recolour each other. Coordinates are in dots
+ */
+struct BrailleCanvas
+{
+    int rows; // Cells
+    int cols;
+    unsigned char *mask;
+};
+
+/* Size the canvas to a window (cells) and clear it. Returns false on
+ * allocation failure
+ */
+bool braille_canvas_resize(struct BrailleCanvas *canvas, int rows, int cols);
+
+void braille_canvas_clear(struct BrailleCanvas *canvas);
+
+void braille_canvas_free(struct BrailleCanvas *canvas);
+
+/* Raise one dot (ignored outside the canvas)
+ */
+void braille_canvas_dot(struct BrailleCanvas *canvas, int dot_row, int dot_col);
+
+/* Raise the dots of a straight line between two dots
+ */
+void braille_canvas_line(struct BrailleCanvas *canvas, int row_a, int col_a, int row_b, int col_b);
+
+/* Draw every non-empty cell with the window's current attributes
+ */
+void braille_canvas_flush(const struct BrailleCanvas *canvas, WINDOW *win);
+
 /* Draw an ellipse. By taking advantage of knowing the cell aspect ratio,
  * this function can generate an "apparent" circle.
  */

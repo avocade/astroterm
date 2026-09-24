@@ -32,8 +32,10 @@ struct Conf
     bool constell;
     bool metadata;
     bool night;    // Red night-vision rendering
-    bool stations; // ISS and Tiangong
-    bool offline;  // Never touch the network
+    bool stations;      // ISS and Tiangong
+    bool starlink;      // Starlink overlay (sunlit satellites)
+    bool starlink_dark; // ... also those in Earth's shadow
+    bool offline;       // Never touch the network
 };
 
 // All information pertinent to rendering a celestial body

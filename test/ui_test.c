@@ -164,6 +164,22 @@ void test_stations_toggle(void)
     TEST_ASSERT_EQUAL_STRING("Stations: no data (run once online)", ui_current_toast(&ui, ctx.mono));
 }
 
+void test_starlink_toggle(void)
+{
+    ctx.starlink_count = 10000;
+    TEST_ASSERT_EQUAL_INT(UI_STARLINK, press('x'));
+    TEST_ASSERT_TRUE(config.starlink);
+    TEST_ASSERT_EQUAL_INT(UI_NONE, press('x'));
+    TEST_ASSERT_FALSE(config.starlink);
+
+    ctx.starlink_count = 0;
+    TEST_ASSERT_EQUAL_INT(UI_NONE, press('x'));
+    TEST_ASSERT_EQUAL_STRING("Starlink: no data (run once online)", ui_current_toast(&ui, ctx.mono));
+
+    press('X');
+    TEST_ASSERT_TRUE(config.starlink_dark);
+}
+
 void test_quit_on_any(void)
 {
     config.quit_on_any = true;
@@ -192,6 +208,7 @@ int main(void)
     RUN_TEST(test_arrow_keys_do_not_quit);
     RUN_TEST(test_help_and_escape);
     RUN_TEST(test_stations_toggle);
+    RUN_TEST(test_starlink_toggle);
     RUN_TEST(test_quit_on_any);
     RUN_TEST(test_toast_expires);
 

@@ -269,6 +269,76 @@ void render_stations(WINDOW *win, const struct Conf *config, const struct SatCat
     }
 }
 
+bool horizontal_to_dots(WINDOW *win, const struct Conf *config, double azimuth, double altitude, int *dot_row,
+                        int *dot_col)
+{
+    double radius, theta;
+    horizontal_to_polar(config, azimuth, altitude, &radius, &theta);
+    if (!(fabs(radius) <= 1.0) || !isfinite(theta))
+    {
+        return false;
+    }
+
+    // Same mapping as polar_to_win, kept fractional
+    int height, width;
+    getmaxyx(win, height, width);
+    double rad_y = (height - 1) / 2.0;
+    double rad_x = (width - 1) / 2.0;
+    double row = radius * -rad_y * sin(theta) + rad_y;
+    double col = radius * rad_x * cos(theta) + rad_x;
+
+    // Cell c spans [c - 0.5, c + 0.5): 4 dot rows, 2 dot columns
+    *dot_row = (int)floor((row + 0.5) * 4.0);
+    *dot_col = (int)floor((col + 0.5) * 2.0);
+    return true;
+}
+
+void render_starlink(WINDOW *win, const struct Conf *config, const struct SatCatalog *starlink,
+                     struct BrailleCanvas *lit, struct BrailleCanvas *dark)
+{
+    int height, width;
+    getmaxyx(win, height, width);
+    braille_canvas_resize(lit, height, width);
+    braille_canvas_resize(dark, height, width);
+
+    attr_t lit_attr = palette_attr(config->night, config->color, ROLE_SAT_LIT, 0);
+    attr_t dark_attr = palette_attr(config->night, config->color, ROLE_SAT_DARK, 0);
+
+    for (int i = 0; i < starlink->count; ++i)
+    {
+        const struct Satellite *sat = &starlink->sats[i];
+        if (!sat->ok || sat->altitude <= 0.0 || (!sat->sunlit && !config->starlink_dark))
+        {
+            continue;
+        }
+
+        if (config->unicode)
+        {
+            int dot_row, dot_col;
+            if (horizontal_to_dots(win, config, sat->azimuth, sat->altitude, &dot_row, &dot_col))
+            {
+                braille_canvas_dot(sat->sunlit ? lit : dark, dot_row, dot_col);
+            }
+        }
+        else
+        {
+            // ',' rather than '.', which faint stars use
+            struct ObjectBase base = {
+                .azimuth = sat->azimuth, .altitude = sat->altitude, .symbol_ASCII = ',', .symbol_unicode = ",",
+            };
+            render_object_stereo(win, &base, config, sat->sunlit ? ROLE_SAT_LIT : ROLE_SAT_DARK);
+        }
+    }
+
+    // Sunlit dots win a shared cell: they are the ones you can see
+    wattron(win, dark_attr);
+    braille_canvas_flush(dark, win);
+    wattroff(win, dark_attr);
+    wattron(win, lit_attr);
+    braille_canvas_flush(lit, win);
+    wattroff(win, lit_attr);
+}
+
 int gcd(int a, int b)
 {
     while (b != 0)

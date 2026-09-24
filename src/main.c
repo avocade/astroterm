@@ -233,12 +233,23 @@ int main(int argc, char *argv[])
 
     // Satellite data is refreshed before the UI starts (see feed.h)
     char data_message[128] = "";
-    if (config.stations && !config.offline)
+    if ((config.stations || config.starlink) && !config.offline)
     {
+        // Both feeds, so the cache is warm before you leave signal behind
         feed_refresh_all(data_message, sizeof(data_message));
     }
-    struct SatCatalog stations;
+    struct SatCatalog stations, starlink;
     load_catalog(FEED_STATIONS, station_catnrs, 2, &stations);
+    load_catalog(FEED_STARLINK, NULL, 0, &starlink);
+
+    // Starlink is propagated at most this often (wall clock), at any speed
+    const double starlink_period = 0.25;
+    double starlink_updated = -1.0e9;
+    bool starlink_toast = false;
+    int starlink_above = 0;
+    int starlink_sunlit = 0;
+    struct BrailleCanvas starlink_lit = {0};
+    struct BrailleCanvas starlink_dark = {0};
 
     // Terminal/System settings
     setlocale(LC_ALL, ""); // Required for unicode rendering
@@ -340,7 +351,33 @@ int main(int argc, char *argv[])
             satellite_update(&stations.sats[i], julian_date, config.latitude, config.longitude, sun_dir, false);
         }
 
-        // Render objects
+        double mono_now = clock_monotonic_s();
+        if (config.starlink && mono_now - starlink_updated >= starlink_period)
+        {
+            starlink_updated = mono_now;
+            starlink_above = starlink_sunlit = 0;
+            for (int i = 0; i < starlink.count; ++i)
+            {
+                struct Satellite *sat = &starlink.sats[i];
+                satellite_update(sat, julian_date, config.latitude, config.longitude, sun_dir, false);
+                if (sat->ok && sat->altitude > 0.0)
+                {
+                    starlink_above++;
+                    starlink_sunlit += sat->sunlit;
+                }
+            }
+            if (starlink_toast)
+            {
+                ui_toast(&ui, mono_now, "Starlink: %d sunlit of %d above the horizon", starlink_sunlit, starlink_above);
+                starlink_toast = false;
+            }
+        }
+
+        // Render objects, bottom layer first
+        if (config.starlink)
+        {
+            render_starlink(main_win, &config, &starlink, &starlink_lit, &starlink_dark);
+        }
         render_stars_stereo(main_win, &config, star_table, num_stars, num_by_mag);
         if (config.constell)
         {
@@ -397,11 +434,18 @@ int main(int argc, char *argv[])
                 .mono = clock_monotonic_s(),
                 .has_colors = has_colors(),
                 .stations_count = stations.count,
+                .starlink_count = starlink.count,
             };
             enum UiAction action = ui_handle_key(ch, &config, &ui, &sim_clock, &ctx);
             if (action == UI_QUIT)
             {
                 quit = true;
+            }
+            else if (action == UI_STARLINK)
+            {
+                // Update now and report what is up
+                starlink_updated = -1.0e9;
+                starlink_toast = true;
             }
         }
 
@@ -430,6 +474,9 @@ int main(int argc, char *argv[])
     free_moon_object(moon_object);
     free_star_names(name_table, num_stars);
     satellite_catalog_free(&stations);
+    satellite_catalog_free(&starlink);
+    braille_canvas_free(&starlink_lit);
+    braille_canvas_free(&starlink_dark);
 
     return EXIT_SUCCESS;
 }
@@ -481,7 +528,7 @@ void parse_options(int argc, char *argv[], struct Conf *config)
     void *argtable[] = {latitude_arg, longitude_arg, datetime_arg,    threshold_arg, label_arg,   fps_arg,  speed_arg,
                         color_arg,    constell_arg,  grid_arg,        unicode_arg,   braille_arg, quit_arg, meta_arg,
                         ratio_arg,    help_arg,      completions_arg, city_arg,      version_arg, night_arg,
-                        offline_arg,  end};
+                        offline_arg,  starlink_arg,  end};
 
     int nerrors = arg_parse(argc, argv, argtable);
 
@@ -645,6 +692,11 @@ void parse_options(int argc, char *argv[], struct Conf *config)
     if (offline_arg->count > 0)
     {
         config->offline = true;
+    }
+
+    if (starlink_arg->count > 0)
+    {
+        config->starlink = true;
     }
 
     if (quit_arg->count > 0)

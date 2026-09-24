@@ -57,6 +57,8 @@ INCLUDE_ARG_DEFINITION_LIT0(braille_arg, "b", "braille", "Use braille characters
 INCLUDE_ARG_DEFINITION_LIT0(quit_arg, "q", "quit-on-any", "Quit on any keypress (default is to quit on 'q' or 'ESC' only)");
 INCLUDE_ARG_DEFINITION_LIT0(meta_arg, "m", "metadata", "Display metadata");
 INCLUDE_ARG_DEFINITION_LIT0(night_arg, NULL, "night", "Start in red night-vision mode (toggle live with 'r')");
+INCLUDE_ARG_DEFINITION_LIT0(starlink_arg, NULL, "starlink",
+                            "Show sunlit Starlink satellites as tiny dots (toggle live with 'x', 'X' adds those in shadow)");
 INCLUDE_ARG_DEFINITION_LIT0(offline_arg, NULL, "offline",
                             "Never download satellite data (the ISS, Tiangong and Starlink then use the local cache)");
 INCLUDE_ARG_DEFINITION_LIT0(help_arg, "h", "help", "Print this help message");

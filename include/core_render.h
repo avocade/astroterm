@@ -5,6 +5,7 @@
 #define CORE_RENDER_H
 
 #include "core.h"
+#include "drawing.h"
 #include "satellite.h"
 #include "term.h"
 
@@ -30,6 +31,19 @@ void render_constells(WINDOW *win, const struct Conf *config, struct Constell **
 /* Render space stations (ISS, Tiangong) above the horizon, dimmed in shadow
  */
 void render_stations(WINDOW *win, const struct Conf *config, const struct SatCatalog *stations);
+
+/* Project a horizontal position to fractional braille-dot coordinates (4 dot
+ * rows and 2 dot columns per cell). Returns false outside the dome
+ */
+bool horizontal_to_dots(WINDOW *win, const struct Conf *config, double azimuth, double altitude, int *dot_row,
+                        int *dot_col);
+
+/* Render Starlink satellites above the horizon as single braille dots (Unicode)
+ * or ',' (ASCII). Sunlit ones always; eclipsed ones when starlink_dark is on.
+ * Drawn first, so every other layer covers them
+ */
+void render_starlink(WINDOW *win, const struct Conf *config, const struct SatCatalog *starlink,
+                     struct BrailleCanvas *lit, struct BrailleCanvas *dark);
 
 /* Render an azimuthal grid on a stereographic projection
  */
