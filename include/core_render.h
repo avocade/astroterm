@@ -5,6 +5,7 @@
 #define CORE_RENDER_H
 
 #include "core.h"
+#include "term.h"
 
 #include <curses.h>
 

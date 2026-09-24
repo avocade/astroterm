@@ -104,6 +104,8 @@ void update_moon_phase(struct Moon *moon_object, double julian_date, double lati
     double age = calc_moon_age(julian_date);
     enum MoonPhase phase = moon_age_to_phase(age);
     moon_object->base.symbol_unicode = get_moon_phase_image(phase, latitude >= 0);
+    moon_object->phase = (int)phase;
+    moon_object->northern = latitude >= 0;
 
     return;
 }

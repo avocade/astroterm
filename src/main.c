@@ -150,6 +150,9 @@ int main(int argc, char *argv[])
         ui_toast(&ui, clock_monotonic_s(), "? for keys");
     }
 
+    // Window backgrounds follow night vision (applied when it changes)
+    bool background_night = !config.night;
+
     // Render loop
     bool quit = false;
     while (!quit)
@@ -171,6 +174,15 @@ int main(int argc, char *argv[])
             resize_meta(metadata_win);
 
             perform_resize = false;
+        }
+
+        if (background_night != config.night)
+        {
+            attr_t background = palette_background(config.night);
+            wbkgd(stdscr, background);
+            wbkgd(main_win, background);
+            wbkgd(metadata_win, background);
+            background_night = config.night;
         }
 
         // Everything is redrawn every frame; ncurses only sends what changed.
@@ -212,7 +224,7 @@ int main(int argc, char *argv[])
         // Toast in the bottom-left corner, off the dome where possible
         double mono = clock_monotonic_s();
         const char *corner[1] = {ui_current_toast(&ui, mono)};
-        ui_draw_corner(main_win, corner, 1, A_NORMAL);
+        ui_draw_corner(main_win, corner, 1, palette_background(config.night));
 
         // Queue windows bottom to top, then draw once to avoid flickering
         wnoutrefresh(stdscr);
@@ -223,7 +235,7 @@ int main(int argc, char *argv[])
         }
         if (ui.help_open)
         {
-            ui_draw_help(&config, &sim_clock, A_NORMAL);
+            ui_draw_help(&config, &sim_clock, palette_background(config.night));
         }
         doupdate();
 
@@ -295,6 +307,14 @@ void print_city_name_quoted(const CityData *city, void *unused)
     putchar('\n');
 }
 
+static void print_short_option(const char *short_name)
+{
+    if (short_name != NULL)
+    {
+        printf("    -%s\n", short_name);
+    }
+}
+
 void parse_options(int argc, char *argv[], struct Conf *config)
 {
 #define INCLUDE_ARG_DEFINITION_DBL0(token, short_name, long_name, datatype, glossary)                                          \
@@ -310,7 +330,8 @@ void parse_options(int argc, char *argv[], struct Conf *config)
 
     void *argtable[] = {latitude_arg, longitude_arg, datetime_arg,    threshold_arg, label_arg,   fps_arg,  speed_arg,
                         color_arg,    constell_arg,  grid_arg,        unicode_arg,   braille_arg, quit_arg, meta_arg,
-                        ratio_arg,    help_arg,      completions_arg, city_arg,      version_arg, end};
+                        ratio_arg,    help_arg,      completions_arg, city_arg,      version_arg, night_arg,
+                        end};
 
     int nerrors = arg_parse(argc, argv, argtable);
 
@@ -334,7 +355,7 @@ void parse_options(int argc, char *argv[], struct Conf *config)
     printf("    -%s\n", short_name);                                                                                           \
     printf("    --%s\n", long_name);
 #define INCLUDE_ARG_DEFINITION_LIT0(token, short_name, long_name, glossary)                                                    \
-    printf("    -%s\n", short_name);                                                                                           \
+    print_short_option(short_name);                                                                                            \
     printf("    --%s\n", long_name);
 #define INCLUDE_ARG_DEFINITION_INT0(token, short_name, long_name, datatype, glossary)                                          \
     printf("    -%s\n", short_name);                                                                                           \
@@ -464,6 +485,11 @@ void parse_options(int argc, char *argv[], struct Conf *config)
     if (braille_arg->count > 0)
     {
         config->braille = true;
+    }
+
+    if (night_arg->count > 0)
+    {
+        config->night = true;
     }
 
     if (quit_arg->count > 0)

@@ -4,7 +4,7 @@
  *
  * The macro arguments are:
  * - The source-code variable name of the argument definition.
- * - The short and long versions of the argument.
+ * - The short and long versions of the argument (the short version may be NULL).
  * - The type of the argument (where applicable).
  * - The help text for the argument.
  *
@@ -56,6 +56,7 @@ INCLUDE_ARG_DEFINITION_LIT0(unicode_arg, "u", "unicode", "Use unicode characters
 INCLUDE_ARG_DEFINITION_LIT0(braille_arg, "b", "braille", "Use braille characters for constellation lines (requires Unicode)");
 INCLUDE_ARG_DEFINITION_LIT0(quit_arg, "q", "quit-on-any", "Quit on any keypress (default is to quit on 'q' or 'ESC' only)");
 INCLUDE_ARG_DEFINITION_LIT0(meta_arg, "m", "metadata", "Display metadata");
+INCLUDE_ARG_DEFINITION_LIT0(night_arg, NULL, "night", "Start in red night-vision mode (toggle live with 'r')");
 INCLUDE_ARG_DEFINITION_LIT0(help_arg, "h", "help", "Print this help message");
 INCLUDE_ARG_DEFINITION_LIT0(completions_arg, "B", "bash-completions", "Print bash completions");
 INCLUDE_ARG_DEFINITION_LIT0(version_arg, "v", "version", "Display version info and exit");

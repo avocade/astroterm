@@ -16,6 +16,8 @@ extern BOOL WINAPI GetCurrentConsoleFont(HANDLE hConsoleOutput, BOOL bMaximumWin
 #include <unistd.h>
 #endif
 
+static void palette_init(void);
+
 void ncurses_init(bool color)
 {
     initscr();
@@ -59,6 +61,55 @@ void ncurses_init(bool color)
     init_pair(6, COLOR_MAGENTA, -1);
     init_pair(7, COLOR_CYAN, -1);
     init_pair(8, COLOR_WHITE, -1);
+
+    palette_init();
+}
+
+// Night vision pairs: three reds on true black
+#define PAIR_NIGHT_BRIGHT 20
+#define PAIR_NIGHT_MEDIUM 21
+#define PAIR_NIGHT_DIM 22
+
+// True when there are too few colors for red tiers, so attributes stand in
+static bool few_colors = true;
+
+static void palette_init(void)
+{
+    few_colors = COLORS < 256;
+
+    // xterm-256 index 16 is #000000 whatever the theme calls "black"
+    short black = few_colors ? COLOR_BLACK : 16;
+    init_pair(PAIR_NIGHT_BRIGHT, few_colors ? COLOR_RED : 196, black);
+    init_pair(PAIR_NIGHT_MEDIUM, few_colors ? COLOR_RED : 160, black);
+    init_pair(PAIR_NIGHT_DIM, few_colors ? COLOR_RED : 88, black);
+}
+
+attr_t palette_attr(bool night, bool color, enum RenderRole role, int day_pair)
+{
+    if (!has_colors())
+    {
+        return A_NORMAL;
+    }
+
+    if (night)
+    {
+        switch (role)
+        {
+        case ROLE_BODY:
+            return COLOR_PAIR(PAIR_NIGHT_BRIGHT) | (few_colors ? A_BOLD : A_NORMAL);
+        case ROLE_LINE:
+            return COLOR_PAIR(PAIR_NIGHT_DIM) | (few_colors ? A_DIM : A_NORMAL);
+        default:
+            return COLOR_PAIR(PAIR_NIGHT_MEDIUM);
+        }
+    }
+
+    return color && day_pair != 0 ? COLOR_PAIR(day_pair) : A_NORMAL;
+}
+
+attr_t palette_background(bool night)
+{
+    return night && has_colors() ? COLOR_PAIR(PAIR_NIGHT_MEDIUM) : A_NORMAL;
 }
 
 void ncurses_kill(void)

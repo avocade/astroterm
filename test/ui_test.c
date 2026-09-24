@@ -36,7 +36,7 @@ void test_display_toggles_flip_and_toast(void)
     } cases[] = {
         {'c', &config.color, "Colors: on"},       {'C', &config.constell, "Constellations: on"},
         {'g', &config.grid, "Grid: on"},          {'u', &config.unicode, "Unicode: on"},
-        {'m', &config.metadata, "Metadata: on"},
+        {'m', &config.metadata, "Metadata: on"},  {'r', &config.night, "Night vision: on"},
     };
 
     for (unsigned int i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
@@ -70,6 +70,9 @@ void test_colors_need_a_color_terminal(void)
     ctx.has_colors = false;
     TEST_ASSERT_EQUAL_INT(UI_NONE, press('c'));
     TEST_ASSERT_FALSE(config.color);
+    TEST_ASSERT_EQUAL_INT(UI_NONE, press('r'));
+    TEST_ASSERT_FALSE(config.night);
+    TEST_ASSERT_EQUAL_STRING("Night vision needs a color terminal", ui_current_toast(&ui, ctx.mono));
 }
 
 void test_threshold_bounds(void)

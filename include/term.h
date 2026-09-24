@@ -9,9 +9,31 @@
 #include <windows.h>
 #endif
 
+/* What an element is, for choosing its color. Day mode keeps upstream colors
+ * for existing elements; night vision maps every role to one of three reds
+ */
+enum RenderRole
+{
+    ROLE_DEFAULT = 0, // Text and anything uncolored
+    ROLE_BODY,        // Sun, Moon, planets
+    ROLE_STAR,
+    ROLE_LABEL,
+    ROLE_LINE, // Constellation figures, grid
+    ROLE_UI,   // Cardinal letters, panel, toasts, help
+};
+
 /* Initialize ncurses.h
  */
 void ncurses_init(bool color);
+
+/* Color pair and attributes for an element. `day_pair` is the element's
+ * upstream color pair (0 for none), used in day mode when colors are on
+ */
+attr_t palette_attr(bool night, bool color, enum RenderRole role, int day_pair);
+
+/* Background for every window: red on true black at night, default otherwise
+ */
+attr_t palette_background(bool night);
 
 /* Kill ncurses
  */

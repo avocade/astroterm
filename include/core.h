@@ -31,6 +31,7 @@ struct Conf
     bool grid;
     bool constell;
     bool metadata;
+    bool night; // Red night-vision rendering
 };
 
 // All information pertinent to rendering a celestial body
@@ -70,6 +71,8 @@ struct Moon
     const struct KepElems *elements;
     const struct KepRates *rates;
     float magnitude;
+    int phase;     // enum MoonPhase, updated with the symbol
+    bool northern; // Phase glyphs are mirrored in the southern hemisphere
 };
 
 struct Constell

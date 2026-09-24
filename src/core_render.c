@@ -21,7 +21,7 @@ void horizontal_to_polar(const struct Conf *config, double azimuth, double altit
     return;
 }
 
-void render_object_stereo(WINDOW *win, struct ObjectBase *object, const struct Conf *config)
+void render_object_stereo(WINDOW *win, struct ObjectBase *object, const struct Conf *config, enum RenderRole role)
 {
     double radius_polar, theta_polar;
     horizontal_to_polar(config, object->azimuth, object->altitude, &radius_polar, &theta_polar);
@@ -37,14 +37,10 @@ void render_object_stereo(WINDOW *win, struct ObjectBase *object, const struct C
     getmaxyx(win, height, width);
     polar_to_win(radius_polar, theta_polar, height, width, &y, &x);
 
-    bool use_color = config->color && object->color_pair != 0;
-
-    if (use_color)
-    {
-        wattron(win, COLOR_PAIR(object->color_pair));
-    }
+    attr_t attr = palette_attr(config->night, config->color, role, object->color_pair);
 
     // Draw object
+    wattron(win, attr);
     if (config->unicode)
     {
         mvwaddstr(win, y, x, object->symbol_unicode);
@@ -53,16 +49,15 @@ void render_object_stereo(WINDOW *win, struct ObjectBase *object, const struct C
     {
         mvwaddch(win, y, x, object->symbol_ASCII);
     }
+    wattroff(win, attr);
 
-    // Draw label
+    // Draw label (in the object's color by day, the label tier at night)
     if (object->label != NULL)
     {
+        attr_t label_attr = config->night ? palette_attr(true, config->color, ROLE_LABEL, 0) : attr;
+        wattron(win, label_attr);
         mvwaddstr_truncate(win, y - 1, x + 1, object->label);
-    }
-
-    if (use_color)
-    {
-        wattroff(win, COLOR_PAIR(object->color_pair));
+        wattroff(win, label_attr);
     }
 
     return;
@@ -89,7 +84,7 @@ void render_stars_stereo(WINDOW *win, const struct Conf *config, struct Star *st
             star->base.label = NULL;
         }
 
-        render_object_stereo(win, &star->base, config);
+        render_object_stereo(win, &star->base, config, ROLE_STAR);
     }
 
     return;
@@ -201,12 +196,15 @@ void render_constellation(WINDOW *win, const struct Conf *config, struct Constel
 void render_constells(WINDOW *win, const struct Conf *config, struct Constell **constell_table, int num_const,
                       const struct Star *star_table)
 {
+    attr_t attr = palette_attr(config->night, config->color, ROLE_LINE, 0);
+    wattron(win, attr);
     clear_braille_lines();
     for (int i = 0; i < num_const; ++i)
     {
         struct Constell *constellation = &((*constell_table)[i]);
         render_constellation(win, config, constellation, star_table);
     }
+    wattroff(win, attr);
 }
 
 void render_planets_stereo(WINDOW *win, const struct Conf *config, const struct Planet *planet_table)
@@ -224,7 +222,7 @@ void render_planets_stereo(WINDOW *win, const struct Conf *config, const struct 
         }
 
         struct Planet planet_data = planet_table[i];
-        render_object_stereo(win, &planet_data.base, config);
+        render_object_stereo(win, &planet_data.base, config, ROLE_BODY);
     }
 
     return;
@@ -232,7 +230,19 @@ void render_planets_stereo(WINDOW *win, const struct Conf *config, const struct 
 
 void render_moon_stereo(WINDOW *win, const struct Conf *config, struct Moon moon_object)
 {
-    render_object_stereo(win, &moon_object.base, config);
+    // Moon phase emoji are drawn in full color by most terminals whatever the
+    // color pair, so night vision uses text glyphs that can be tinted red
+    if (config->night)
+    {
+        static const char *text_phases[8] = {"○", "☽", "◑", "◑", "●", "◐", "◐", "☾"};
+        int phase = moon_object.phase;
+        if (!moon_object.northern && phase != 0)
+        {
+            phase = 8 - phase;
+        }
+        moon_object.base.symbol_unicode = text_phases[phase & 7];
+    }
+    render_object_stereo(win, &moon_object.base, config, ROLE_BODY);
 
     return;
 }
@@ -297,6 +307,9 @@ void render_azimuthal_grid(WINDOW *win, const struct Conf *config)
     }
     qsort(angles, number_angles, sizeof(int), compare_angles);
 
+    attr_t attr = palette_attr(config->night, config->color, ROLE_LINE, 0);
+    wattron(win, attr);
+
     // Draw angles in all four quadrants
     int quad;
     for (quad = 0; quad < 4; ++quad)
@@ -331,6 +344,8 @@ void render_azimuthal_grid(WINDOW *win, const struct Conf *config)
             free(label);
         }
     }
+    wattroff(win, attr);
+    free(angles);
 
     // while (angle <= 90.0)
     // {
@@ -345,10 +360,8 @@ void render_cardinal_directions(WINDOW *win, const struct Conf *config)
 {
     // Render horizon directions
 
-    if (config->color)
-    {
-        wattron(win, COLOR_PAIR(5));
-    }
+    attr_t attr = palette_attr(config->night, config->color, ROLE_UI, 5);
+    wattron(win, attr);
 
     int height, width;
     getmaxyx(win, height, width);
@@ -370,8 +383,5 @@ void render_cardinal_directions(WINDOW *win, const struct Conf *config)
         mvwaddch(win, y, x, letters[i]);
     }
 
-    if (config->color)
-    {
-        wattroff(win, COLOR_PAIR(5));
-    }
+    wattroff(win, attr);
 }
