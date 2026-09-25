@@ -155,7 +155,7 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
         }
         config->color = !config->color;
         ui_toast(ui, ctx->mono, "Colors: %s", on_off(config->color));
-        return UI_PALETTE;
+        return UI_NONE;
 
     case CMD_CONSTELL:
         config->constell = !config->constell;
@@ -187,7 +187,7 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
     case CMD_METADATA:
         config->metadata = !config->metadata;
         ui_toast(ui, ctx->mono, "Metadata: %s", on_off(config->metadata));
-        return UI_LAYOUT;
+        return UI_NONE;
 
     case CMD_NIGHT:
         if (!ctx->has_colors)
@@ -197,7 +197,7 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
         }
         config->night = !config->night;
         ui_toast(ui, ctx->mono, "Night vision: %s", on_off(config->night));
-        return UI_PALETTE;
+        return UI_NONE;
 
     case CMD_STATIONS:
         config->stations = !config->stations;
@@ -286,13 +286,13 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
 
     case CMD_HELP:
         ui->help_open = !ui->help_open;
-        return UI_LAYOUT;
+        return UI_NONE;
 
     case CMD_QUIT:
         if (ch == KEY_ESCAPE && ui->help_open)
         {
             ui->help_open = false;
-            return UI_LAYOUT;
+            return UI_NONE;
         }
         return UI_QUIT;
     }

@@ -93,6 +93,21 @@ void test_off_ladder_speed_moves_to_next_rung(void)
     TEST_ASSERT_EQUAL_DOUBLE(10.0, clock.speed);
 }
 
+void test_negative_speed_keeps_direction(void)
+{
+    struct SimClock clock;
+    sim_clock_init(&clock, JD0, 0.0, -600.0); // e.g. --speed -600
+
+    sim_clock_step_speed(&clock, 1, 0.0);
+    TEST_ASSERT_EQUAL_DOUBLE(-3600.0, clock.speed); // Faster, still backwards
+
+    for (int i = 0; i < 10; ++i)
+    {
+        sim_clock_step_speed(&clock, -1, 0.0);
+    }
+    TEST_ASSERT_EQUAL_DOUBLE(-1.0, clock.speed);
+}
+
 void test_jump_to_now(void)
 {
     struct SimClock clock;
@@ -127,6 +142,7 @@ int main(void)
     RUN_TEST(test_speed_ladder);
     RUN_TEST(test_speed_change_keeps_time_continuous);
     RUN_TEST(test_off_ladder_speed_moves_to_next_rung);
+    RUN_TEST(test_negative_speed_keeps_direction);
     RUN_TEST(test_jump_to_now);
     RUN_TEST(test_realtime_clock_is_sane);
 

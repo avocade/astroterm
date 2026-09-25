@@ -52,9 +52,9 @@ void test_display_toggles_flip_and_toast(void)
 
 void test_actions_request_side_effects(void)
 {
-    TEST_ASSERT_EQUAL_INT(UI_PALETTE, press('c'));
-    TEST_ASSERT_EQUAL_INT(UI_LAYOUT, press('m'));
-    TEST_ASSERT_EQUAL_INT(UI_NONE, press('g'));
+    // Everything is redrawn each frame, so plain toggles need no side effect
+    TEST_ASSERT_EQUAL_INT(UI_NONE, press('c'));
+    TEST_ASSERT_EQUAL_INT(UI_NONE, press('m'));
     TEST_ASSERT_EQUAL_INT(UI_NONE, press('Z')); // Unbound key
 }
 
@@ -137,7 +137,7 @@ void test_arrow_keys_do_not_quit(void)
 
 void test_help_and_escape(void)
 {
-    TEST_ASSERT_EQUAL_INT(UI_LAYOUT, press('?'));
+    TEST_ASSERT_EQUAL_INT(UI_NONE, press('?'));
     TEST_ASSERT_TRUE(ui.help_open);
 
     // Other keys act and keep the modal open
@@ -146,7 +146,7 @@ void test_help_and_escape(void)
     TEST_ASSERT_TRUE(config.grid);
 
     // ESC closes the modal first, then quits
-    TEST_ASSERT_EQUAL_INT(UI_LAYOUT, press(27));
+    TEST_ASSERT_EQUAL_INT(UI_NONE, press(27));
     TEST_ASSERT_FALSE(ui.help_open);
     TEST_ASSERT_EQUAL_INT(UI_QUIT, press(27));
     TEST_ASSERT_EQUAL_INT(UI_QUIT, press('q'));

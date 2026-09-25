@@ -30,6 +30,7 @@
 #include <curses.h>
 
 #include <locale.h>
+#include <math.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -118,6 +119,12 @@ static void iss_status(const struct SatCatalog *stations, const struct Conf *con
         return;
     }
 
+    if (fabs(jd - iss->sgp4.el.epoch_jd) > SAT_MAX_ELEMENT_AGE_DAYS)
+    {
+        snprintf(buf, len, "ISS: no orbit data for this date");
+        return;
+    }
+
     if (iss->ok && iss->altitude > SAT_PASS_MIN_ALTITUDE)
     {
         snprintf(buf, len, "ISS up: %.0f° %s%s", iss->altitude * 180.0 / M_PI, compass_point(iss->azimuth),
@@ -158,7 +165,7 @@ static void iss_status(const struct SatCatalog *stations, const struct Conf *con
     if (!visible)
     {
         double sun = sun_altitude(pass.peak_jd, config->latitude, config->longitude) * 180.0 / M_PI;
-        light = sun > -0.833 ? " (daylight)" : " (twilight)";
+        light = sun > -0.833 ? " (daylight)" : sun > -6.0 ? " (twilight)" : " (in shadow)";
     }
     char when[32];
     format_local_time(pass.start_jd, jd, when, sizeof(when));
@@ -272,7 +279,14 @@ int main(int argc, char *argv[])
 
     // Simulation time is derived from the realtime clock each frame, so slow
     // frames or a suspended process never make the sky fall behind
-    sim_clock_init(&sim_clock, julian_date_start, clock_realtime_s(), config.speed);
+    // In realtime mode, anchor to the moment the UI starts: the satellite
+    // download above may have taken seconds, and the sky must not lag by that
+    double wall_start = clock_realtime_s();
+    if (config.dt_string_utc == NULL)
+    {
+        julian_date_start = unix_to_julian_date(wall_start);
+    }
+    sim_clock_init(&sim_clock, julian_date_start, wall_start, config.speed);
 
     struct UiState ui = {0};
     double data_age = feed_age_hours(FEED_STATIONS);

@@ -79,9 +79,9 @@ void setUp(void)
             "#!/bin/sh\n"
             "echo \"$@\" >> '%s'\n"
             "while [ $# -gt 0 ]; do [ \"$1\" = -o ] && out=\"$2\"; shift; done\n"
+            "if [ \"${FAKE_EXIT:-0}\" != 0 ]; then printf 000; exit $FAKE_EXIT; fi\n" // Like curl: no reply
             "/bin/cp '%s' \"$out\"\n"
-            "printf '%%s' \"${FAKE_STATUS:-200}\"\n"
-            "exit ${FAKE_EXIT:-0}\n",
+            "printf '%%s' \"${FAKE_STATUS:-200}\"\n",
             log_path, body_path);
     fclose(f);
     chmod(script, 0700);
@@ -216,6 +216,21 @@ void test_network_failure_stops_early(void)
     TEST_ASSERT_EQUAL_INT(1, curl_calls()); // Did not also try the second feed
 }
 
+void test_offline_failure_does_not_block_retry(void)
+{
+    // Offline: curl never reached CelesTrak, so there is nothing to be polite
+    // about, and reconnecting must allow an immediate retry
+    setenv("FAKE_EXIT", "6", 1);
+    char msg[128];
+    feed_refresh_all(msg, sizeof(msg));
+    TEST_ASSERT_EQUAL_INT(1, curl_calls());
+
+    unsetenv("FAKE_EXIT");
+    feed_refresh_all(msg, sizeof(msg));
+    TEST_ASSERT_EQUAL_STRING("", msg);
+    TEST_ASSERT_EQUAL_INT(3, curl_calls());
+}
+
 void test_curl_missing(void)
 {
     setenv("PATH", "/nonexistent", 1);
@@ -251,6 +266,7 @@ int main(void)
     RUN_TEST(test_rate_limited_keeps_cache);
     RUN_TEST(test_truncated_download_rejected);
     RUN_TEST(test_network_failure_stops_early);
+    RUN_TEST(test_offline_failure_does_not_block_retry);
     RUN_TEST(test_curl_missing);
     RUN_TEST(test_curl_args_are_hardened);
 

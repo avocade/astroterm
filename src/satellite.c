@@ -78,15 +78,19 @@ void sun_direction(double jd, double out[3])
     out[2] = -z / norm;
 }
 
-double sun_altitude(double jd, double latitude, double longitude)
+static double sun_altitude_from_direction(const double s[3], double jd, double latitude, double longitude)
 {
-    double s[3];
-    sun_direction(jd, s);
-
     double ra, dec, az, alt;
     equatorial_rectangular_to_spherical(s[0], s[1], s[2], &ra, &dec);
     equatorial_to_horizontal(ra, dec, greenwich_mean_sidereal_time_rad(jd), latitude, longitude, &az, &alt);
     return alt;
+}
+
+double sun_altitude(double jd, double latitude, double longitude)
+{
+    double s[3];
+    sun_direction(jd, s);
+    return sun_altitude_from_direction(s, jd, latitude, longitude);
 }
 
 void teme_to_horizontal(const double r[3], double jd, double latitude, double longitude, double *azimuth, double *altitude)
@@ -206,7 +210,7 @@ static bool pass_condition(const struct Satellite *sat, double jd, double lat, d
     }
     double s[3];
     sun_direction(jd, s);
-    return is_sunlit(r, s) && sun_altitude(jd, lat, lon) < SAT_OBSERVER_DARK_SUN_ALT;
+    return is_sunlit(r, s) && sun_altitude_from_direction(s, jd, lat, lon) < SAT_OBSERVER_DARK_SUN_ALT;
 }
 
 /* Bisect the instant the condition flips between a (value a_state) and b

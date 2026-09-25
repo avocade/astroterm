@@ -1,5 +1,6 @@
 #include "sim_clock.h"
 
+#include <math.h>
 #include <time.h>
 
 #ifdef _WIN32
@@ -79,18 +80,19 @@ void sim_clock_step_speed(struct SimClock *clock, int direction, double wall)
 {
     reanchor(clock, wall);
 
-    double speed = clock->speed;
+    // Step the magnitude, keeping the direction (--speed may be negative)
+    double sign = clock->speed < 0.0 ? -1.0 : 1.0;
+    double speed = fabs(clock->speed);
     if (direction > 0)
     {
         for (unsigned int i = 0; i < LADDER_LEN; ++i)
         {
             if (speed_ladder[i] > speed)
             {
-                clock->speed = speed_ladder[i];
+                clock->speed = sign * speed_ladder[i];
                 return;
             }
         }
-        clock->speed = speed_ladder[LADDER_LEN - 1] > speed ? speed_ladder[LADDER_LEN - 1] : speed;
     }
     else if (direction < 0)
     {
@@ -98,11 +100,10 @@ void sim_clock_step_speed(struct SimClock *clock, int direction, double wall)
         {
             if (speed_ladder[i] < speed)
             {
-                clock->speed = speed_ladder[i];
+                clock->speed = sign * speed_ladder[i];
                 return;
             }
         }
-        clock->speed = speed_ladder[0] < speed ? speed_ladder[0] : speed;
     }
 }
 

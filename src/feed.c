@@ -328,12 +328,18 @@ static enum FetchResult refresh_one(enum FeedId id)
         return FETCH_ERROR;
     }
     close(fd);
-    touch(marker);
 
     fprintf(stderr, "astroterm: updating satellite data (%s)...\n", feed_names[id]);
 
     int http = 0;
     enum FetchResult result = run_curl(feed_urls[id], tmp, &http);
+
+    // The two-hour wait is politeness toward CelesTrak, so it only starts once
+    // CelesTrak has actually answered (not when we were offline)
+    if (http != 0)
+    {
+        touch(marker);
+    }
     if (result == FETCH_OK)
     {
         // Accept only a feed that parses, and that is not suspiciously smaller

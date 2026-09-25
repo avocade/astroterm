@@ -2,8 +2,9 @@
  *
  * One table defines every key, its help row and its toast text. Key handling
  * (ui_handle_key) is a pure state transition over the display config, the UI
- * state and the simulation clock: it never draws, so it can be unit tested. The
- * caller performs the side effects named by the returned action.
+ * state and the simulation clock: it never draws, so it can be unit tested.
+ * Everything is redrawn every frame, so most keys need nothing more; the few
+ * side effects that do are named by the returned action.
  */
 
 #ifndef UI_H
@@ -22,8 +23,6 @@ enum UiAction
 {
     UI_NONE = 0,
     UI_QUIT,
-    UI_LAYOUT,     // A window appeared or disappeared: re-layout and clear
-    UI_PALETTE,    // Colors changed: re-apply the palette
     UI_STARLINK,   // Starlink turned on: update now and report counts
     UI_SATELLITES, // Satellite state needs recomputing now (e.g. vectors on)
 };

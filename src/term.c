@@ -275,6 +275,15 @@ void mvwaddstr_truncate(WINDOW *win, int y, int x, const char *str)
     if (space_left > 0)
     {
         size_t n = MIN((size_t)space_left, (size_t)(MAX_STR_LEN - 1));
+        size_t len = strlen(str);
+        if (n < len)
+        {
+            // Back up to the start of a UTF-8 character
+            while (n > 0 && ((unsigned char)str[n] & 0xC0) == 0x80)
+            {
+                n--;
+            }
+        }
         char truncated[MAX_STR_LEN];
         strncpy(truncated, str, n);
         truncated[n] = '\0';
