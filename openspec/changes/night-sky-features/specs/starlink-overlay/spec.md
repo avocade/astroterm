@@ -35,3 +35,23 @@ Starlink positions SHALL be recomputed at most 4 times per wall-clock second at 
 #### Scenario: Fast-forward
 - **WHEN** the overlay is on at 3600x for 10 seconds with N satellites
 - **THEN** at most 40 × N SGP4 propagations are made
+
+### Requirement: No download without consent
+The application SHALL NEVER download Starlink data without the user saying yes. Turning the layer on (`x` or
+`--starlink`) SHALL show cached data immediately. It SHALL ask "Refresh it now? y/N" only when the cache is older
+than 14 days, and "Download it now? y/N" when there is none; any answer other than `y` keeps the cached data (or
+turns the layer off when there is none). `U` SHALL ask to refresh at any time. With `--offline` it SHALL never
+ask. An accepted download SHALL run in the background, keeping the cached dots on screen and the sky animating,
+and SHALL swap in the new data when it validates.
+
+#### Scenario: Cached data shown at once
+- **WHEN** the Starlink cache is 3 days old and the user presses `x`
+- **THEN** the dots appear immediately and nothing is downloaded or asked
+
+#### Scenario: Old cache
+- **WHEN** the Starlink cache is 16 days old and the user presses `x`
+- **THEN** the cached dots appear and the prompt asks to refresh; pressing `n` keeps them and downloads nothing
+
+#### Scenario: Slow network
+- **WHEN** the user accepts a refresh on a slow connection
+- **THEN** the sky keeps animating with the cached dots, and the new data appears when the download completes

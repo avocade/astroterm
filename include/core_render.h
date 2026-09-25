@@ -32,6 +32,24 @@ void render_constells(WINDOW *win, const struct Conf *config, struct Constell **
  */
 void render_stations(WINDOW *win, const struct Conf *config, const struct SatCatalog *stations);
 
+/* Apply zoom to a point on the unit dome (the horizon is the unit circle): the
+ * shown tile maps onto the window, which spans [-1, 1] on both axes
+ */
+void view_zoom(const struct Conf *config, double *x, double *y);
+
+/* View position of a horizontal coordinate (rotation and zoom applied).
+ * Returns the radius on the unzoomed dome: <= 1 means above the horizon
+ */
+double sky_to_view(const struct Conf *config, double azimuth, double altitude, double *x, double *y);
+
+/* Above the horizon and inside the window
+ */
+bool view_visible(double radius, double x, double y);
+
+/* Fractional cell (row, column) of a view position
+ */
+void view_to_cell(WINDOW *win, double x, double y, double *row, double *col);
+
 /* Project a horizontal position to fractional braille-dot coordinates (4 dot
  * rows and 2 dot columns per cell). Returns false outside the dome
  */

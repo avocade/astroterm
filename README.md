@@ -285,8 +285,15 @@ Press <kbd>?</kbd> at any time for a help overlay that shows every key and its c
 | <kbd>space</kbd> | Pause time |
 | <kbd><</kbd> <kbd>></kbd> | Slower or faster: 1x, 10x, 60x, 600x, 3600x |
 | <kbd>n</kbd> | Back to now, realtime |
-| <kbd>←</kbd> <kbd>→</kbd> <kbd>↓</kbd> | Rotate the dome so the horizon you face is at the bottom; reset |
+| <kbd>z</kbd> / <kbd>Z</kbd> | Zoom in / out: whole sky, quadrants (2x), 4×4 tiles (4x) |
+| <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> or arrows | Move one tile when zoomed |
+| <kbd>1</kbd>–<kbd>4</kbd> | Look at a quadrant: top-left, top-right, bottom-left, bottom-right |
+| <kbd>[</kbd> <kbd>]</kbd> | Rotate the dome so the horizon you face is at the bottom |
+| <kbd>R</kbd> | Reset the view: whole sky, north up |
 | <kbd>q</kbd> <kbd>ESC</kbd> | Quit (<kbd>ESC</kbd> closes the help first) |
+
+While zoomed, the corner shows where you are: a small map of the tiles and the direction and height the tile
+looks at, e.g. `Zoom 2x ▖ SE 19° up`.
 
 Motion vectors show where satellites will be 10 seconds later, and where the Sun, Moon and planets will be among the
 stars a day later. The daily turning of the whole sky is left out, since every star shares it: what remains is

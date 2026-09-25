@@ -34,6 +34,7 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 static void catch_winch(int sig);
@@ -193,6 +194,7 @@ int main(int argc, char *argv[])
         .constell = false,
         .metadata = false,
         .stations = true,
+        .zoom = 1,
     };
 
     // Parse command line args and convert to internal representations
@@ -445,8 +447,18 @@ int main(int argc, char *argv[])
         double mono = clock_monotonic_s();
         char iss_line[64];
         iss_status(&stations, &config, julian_date, iss_line, sizeof(iss_line));
-        const char *corner[2] = {iss_line, ui_current_toast(&ui, mono)};
-        ui_draw_corner(main_win, corner, 2, palette_background(config.night));
+        char view_line[64] = "";
+        if (config.zoom > 1)
+        {
+            ui_view_text(&config, view_line, sizeof(view_line));
+        }
+        const char *toast = ui_current_toast(&ui, mono);
+        const char *corner[3] = {view_line, iss_line, toast};
+        if (toast != NULL && strcmp(toast, view_line) == 0)
+        {
+            corner[0] = NULL; // Do not say it twice
+        }
+        ui_draw_corner(main_win, corner, 3, palette_background(config.night));
 
         // Queue windows bottom to top, then draw once to avoid flickering
         wnoutrefresh(stdscr);

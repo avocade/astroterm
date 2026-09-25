@@ -24,6 +24,9 @@ struct Conf
     double julian_date;
     double aspect_ratio;
     double rotation; // Dome rotation (radians), applied to every projected object
+    int zoom;        // Tiles per side: 1 (whole sky), 2 (quadrants) or 4
+    int tile_x;      // Tile shown when zoomed, 0 = left
+    int tile_y;      // 0 = top
     bool quit_on_any;
     bool unicode;
     bool braille;

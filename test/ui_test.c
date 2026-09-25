@@ -1,3 +1,4 @@
+#include "core_render.h"
 #include "ui.h"
 #include "unity.h"
 
@@ -117,15 +118,127 @@ void test_rotation(void)
 {
     for (int i = 0; i < 12; ++i)
     {
-        press(KEY_RIGHT);
+        press(']');
     }
     TEST_ASSERT_DOUBLE_WITHIN(1e-9, M_PI, config.rotation);
     TEST_ASSERT_EQUAL_STRING("Rotation: 180°", ui_current_toast(&ui, ctx.mono));
 
-    press(KEY_LEFT);
+    press('[');
     TEST_ASSERT_DOUBLE_WITHIN(1e-9, M_PI - M_PI / 12.0, config.rotation);
 
+    press('R');
+    TEST_ASSERT_EQUAL_DOUBLE(0.0, config.rotation);
+}
+
+void test_quadrant_jump(void)
+{
+    config.unicode = true;
+    press('3'); // Bottom-left: south is down, east is left
+    TEST_ASSERT_EQUAL_INT(2, config.zoom);
+    TEST_ASSERT_EQUAL_INT(0, config.tile_x);
+    TEST_ASSERT_EQUAL_INT(1, config.tile_y);
+    TEST_ASSERT_EQUAL_STRING("Zoom 2x ▖ SE 19° up", ui_current_toast(&ui, ctx.mono));
+
+    press('2');
+    TEST_ASSERT_EQUAL_INT(1, config.tile_x);
+    TEST_ASSERT_EQUAL_INT(0, config.tile_y);
+}
+
+void test_zoom_in_and_out(void)
+{
+    press('z'); // 1x -> 2x, bottom-left quadrant
+    TEST_ASSERT_EQUAL_INT(2, config.zoom);
+    TEST_ASSERT_EQUAL_INT(0, config.tile_x);
+    TEST_ASSERT_EQUAL_INT(1, config.tile_y);
+
+    press('z'); // 2x -> 4x, the sub-tile nearest the zenith
+    TEST_ASSERT_EQUAL_INT(4, config.zoom);
+    TEST_ASSERT_EQUAL_INT(1, config.tile_x);
+    TEST_ASSERT_EQUAL_INT(2, config.tile_y);
+
+    press('z');
+    TEST_ASSERT_EQUAL_INT(4, config.zoom); // Closest level holds
+
+    press('Z'); // Back to the containing quadrant
+    TEST_ASSERT_EQUAL_INT(2, config.zoom);
+    TEST_ASSERT_EQUAL_INT(0, config.tile_x);
+    TEST_ASSERT_EQUAL_INT(1, config.tile_y);
+
+    press('Z');
+    TEST_ASSERT_EQUAL_INT(1, config.zoom);
+    TEST_ASSERT_EQUAL_STRING("Zoom: whole sky", ui_current_toast(&ui, ctx.mono));
+}
+
+void test_walk_the_tiles(void)
+{
+    config.zoom = 4;
+    config.tile_x = 0;
+    config.tile_y = 0;
+    press('l');
+    press('l');
+    press(KEY_RIGHT);
+    press('h');
+    TEST_ASSERT_EQUAL_INT(2, config.tile_x);
+    TEST_ASSERT_EQUAL_INT(0, config.tile_y);
+
+    press('k'); // Already on the top row
+    TEST_ASSERT_EQUAL_INT(0, config.tile_y);
+    TEST_ASSERT_EQUAL_STRING("Edge of the sky", ui_current_toast(&ui, ctx.mono));
+
+    press('j');
     press(KEY_DOWN);
+    TEST_ASSERT_EQUAL_INT(2, config.tile_y);
+}
+
+void test_arrows_at_whole_sky(void)
+{
+    TEST_ASSERT_EQUAL_INT(UI_NONE, press(KEY_LEFT));
+    TEST_ASSERT_EQUAL_INT(1, config.zoom > 1 ? config.zoom : 1);
+    TEST_ASSERT_EQUAL_STRING("Zoom in with z to move around", ui_current_toast(&ui, ctx.mono));
+}
+
+void test_zoom_geometry(void)
+{
+    // 1x: the view is the dome itself
+    double x = 0.3, y = -0.4;
+    view_zoom(&config, &x, &y);
+    TEST_ASSERT_DOUBLE_WITHIN(1e-12, 0.3, x);
+    TEST_ASSERT_DOUBLE_WITHIN(1e-12, -0.4, y);
+
+    // South on the horizon is the bottom middle of the whole-sky view
+    double r = sky_to_view(&config, M_PI, 0.0, &x, &y);
+    TEST_ASSERT_DOUBLE_WITHIN(1e-12, 1.0, r);
+    TEST_ASSERT_DOUBLE_WITHIN(1e-12, 0.0, x);
+    TEST_ASSERT_DOUBLE_WITHIN(1e-12, -1.0, y);
+
+    // 2x bottom-left quadrant: the zenith is its top-right corner, the south
+    // horizon its bottom-right corner
+    config.zoom = 2;
+    config.tile_x = 0;
+    config.tile_y = 1;
+    sky_to_view(&config, 0.0, M_PI / 2.0, &x, &y);
+    TEST_ASSERT_DOUBLE_WITHIN(1e-9, 1.0, x);
+    TEST_ASSERT_DOUBLE_WITHIN(1e-9, 1.0, y);
+    r = sky_to_view(&config, M_PI, 0.0, &x, &y);
+    TEST_ASSERT_DOUBLE_WITHIN(1e-9, 1.0, x);
+    TEST_ASSERT_DOUBLE_WITHIN(1e-9, -1.0, y);
+    TEST_ASSERT_TRUE(view_visible(r, x, y));
+
+    // Something high in the north is not in this quadrant
+    r = sky_to_view(&config, 0.0, 60.0 * M_PI / 180.0, &x, &y);
+    TEST_ASSERT_FALSE(view_visible(r, x, y));
+
+    // Below the horizon is never visible, even inside the window
+    r = sky_to_view(&config, M_PI * 0.75, -5.0 * M_PI / 180.0, &x, &y);
+    TEST_ASSERT_FALSE(view_visible(r, x, y));
+}
+
+void test_reset_view(void)
+{
+    press('4');
+    press(']');
+    press('R');
+    TEST_ASSERT_EQUAL_INT(1, config.zoom);
     TEST_ASSERT_EQUAL_DOUBLE(0.0, config.rotation);
 }
 
@@ -210,6 +323,12 @@ int main(void)
     RUN_TEST(test_threshold_bounds);
     RUN_TEST(test_time_keys);
     RUN_TEST(test_rotation);
+    RUN_TEST(test_quadrant_jump);
+    RUN_TEST(test_zoom_in_and_out);
+    RUN_TEST(test_walk_the_tiles);
+    RUN_TEST(test_arrows_at_whole_sky);
+    RUN_TEST(test_zoom_geometry);
+    RUN_TEST(test_reset_view);
     RUN_TEST(test_arrow_keys_do_not_quit);
     RUN_TEST(test_help_and_escape);
     RUN_TEST(test_stations_toggle);

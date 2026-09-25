@@ -23,21 +23,54 @@ void horizontal_to_polar(const struct Conf *config, double azimuth, double altit
     return;
 }
 
+void view_zoom(const struct Conf *config, double *x, double *y)
+{
+    int tiles = config->zoom > 1 ? config->zoom : 1;
+    double cx = -1.0 + (2.0 * config->tile_x + 1.0) / tiles;
+    double cy = 1.0 - (2.0 * config->tile_y + 1.0) / tiles;
+    *x = (*x - cx) * tiles;
+    *y = (*y - cy) * tiles;
+}
+
+double sky_to_view(const struct Conf *config, double azimuth, double altitude, double *x, double *y)
+{
+    double radius, theta;
+    horizontal_to_polar(config, azimuth, altitude, &radius, &theta);
+    *x = radius * cos(theta);
+    *y = radius * sin(theta);
+    view_zoom(config, x, y);
+    return radius;
+}
+
+bool view_visible(double radius, double x, double y)
+{
+    // Above the horizon, inside the window (and not NaN, which fails both)
+    return radius <= 1.0 && fabs(x) <= 1.0 && fabs(y) <= 1.0;
+}
+
+void view_to_cell(WINDOW *win, double x, double y, double *row, double *col)
+{
+    int height, width;
+    getmaxyx(win, height, width);
+    double rad_y = (height - 1) / 2.0;
+    double rad_x = (width - 1) / 2.0;
+    *row = rad_y - y * rad_y;
+    *col = rad_x + x * rad_x;
+}
+
 void render_object_stereo(WINDOW *win, struct ObjectBase *object, const struct Conf *config, enum RenderRole role)
 {
-    double radius_polar, theta_polar;
-    horizontal_to_polar(config, object->azimuth, object->altitude, &radius_polar, &theta_polar);
-
-    // If outside projection (or not a number), ignore
-    if (!(fabs(radius_polar) <= 1.0) || !isfinite(theta_polar))
+    double view_x, view_y;
+    double radius = sky_to_view(config, object->azimuth, object->altitude, &view_x, &view_y);
+    if (!view_visible(radius, view_x, view_y))
     {
         return;
     }
 
-    int y, x;
-    int height, width;
-    getmaxyx(win, height, width);
-    polar_to_win(radius_polar, theta_polar, height, width, &y, &x);
+    double row, col;
+    view_to_cell(win, view_x, view_y, &row, &col);
+    int y = (int)round(row);
+    int x = (int)round(col);
 
     attr_t attr = palette_attr(config->night, config->color, role, object->color_pair);
 
@@ -148,14 +181,23 @@ void render_constellation(WINDOW *win, const struct Conf *config, struct Constel
             radius_b = 1.0;
         }
 
-        int height, width;
-        getmaxyx(win, height, width);
+        // Into the (zoomed) view; skip segments entirely off one side of it
+        double vxa = radius_a * cos(theta_a), vya = radius_a * sin(theta_a);
+        double vxb = radius_b * cos(theta_b), vyb = radius_b * sin(theta_b);
+        view_zoom(config, &vxa, &vya);
+        view_zoom(config, &vxb, &vyb);
+        if ((vxa > 1.0 && vxb > 1.0) || (vxa < -1.0 && vxb < -1.0) || (vya > 1.0 && vyb > 1.0) || (vya < -1.0 && vyb < -1.0))
+        {
+            continue;
+        }
+        a_clipped = a_clipped || fabs(vxa) > 1.0 || fabs(vya) > 1.0;
+        b_clipped = b_clipped || fabs(vxb) > 1.0 || fabs(vyb) > 1.0;
 
-        int ya, xa;
-        int yb, xb;
-        polar_to_win(radius_a, theta_a, height, width, &ya, &xa);
-
-        polar_to_win(radius_b, theta_b, height, width, &yb, &xb);
+        double row, col;
+        view_to_cell(win, vxa, vya, &row, &col);
+        int ya = (int)round(row), xa = (int)round(col);
+        view_to_cell(win, vxb, vyb, &row, &col);
+        int yb = (int)round(row), xb = (int)round(col);
 
         // TODO: In old version, constrained line length for some reason... not
         // sure why?
@@ -273,20 +315,15 @@ void render_stations(WINDOW *win, const struct Conf *config, const struct SatCat
 
 bool horizontal_to_dots(WINDOW *win, const struct Conf *config, double azimuth, double altitude, int *dot_row, int *dot_col)
 {
-    double radius, theta;
-    horizontal_to_polar(config, azimuth, altitude, &radius, &theta);
-    if (!(fabs(radius) <= 1.0) || !isfinite(theta))
+    double view_x, view_y;
+    double radius = sky_to_view(config, azimuth, altitude, &view_x, &view_y);
+    if (!view_visible(radius, view_x, view_y))
     {
         return false;
     }
 
-    // Same mapping as polar_to_win, kept fractional
-    int height, width;
-    getmaxyx(win, height, width);
-    double rad_y = (height - 1) / 2.0;
-    double rad_x = (width - 1) / 2.0;
-    double row = radius * -rad_y * sin(theta) + rad_y;
-    double col = radius * rad_x * cos(theta) + rad_x;
+    double row, col;
+    view_to_cell(win, view_x, view_y, &row, &col);
 
     // Cell c spans [c - 0.5, c + 0.5): 4 dot rows, 2 dot columns
     *dot_row = (int)floor((row + 0.5) * 4.0);
@@ -410,17 +447,21 @@ static void draw_vector(WINDOW *win, const struct Conf *config, double az0, doub
         y1 = y0 + t * dy;
     }
 
-    int height, width;
-    getmaxyx(win, height, width);
-    double rad_y = (height - 1) / 2.0;
-    double rad_x = (width - 1) / 2.0;
+    // Into the (zoomed) view; the object itself must be on screen
+    view_zoom(config, &x0, &y0);
+    view_zoom(config, &x1, &y1);
+    if (!view_visible(0.0, x0, y0))
+    {
+        return;
+    }
+    double row0, col0, row1, col1;
+    view_to_cell(win, x0, y0, &row0, &col0);
+    view_to_cell(win, x1, y1, &row1, &col1);
 
     if (config->unicode)
     {
-        int r0 = (int)floor((rad_y - y0 * rad_y + 0.5) * 4.0);
-        int c0 = (int)floor((rad_x + x0 * rad_x + 0.5) * 2.0);
-        int r1 = (int)floor((rad_y - y1 * rad_y + 0.5) * 4.0);
-        int c1 = (int)floor((rad_x + x1 * rad_x + 0.5) * 2.0);
+        int r0 = (int)floor((row0 + 0.5) * 4.0), c0 = (int)floor((col0 + 0.5) * 2.0);
+        int r1 = (int)floor((row1 + 0.5) * 4.0), c1 = (int)floor((col1 + 0.5) * 2.0);
         if (r0 != r1 || c0 != c1)
         {
             braille_canvas_line(canvas, r0, c0, r1, c1);
@@ -428,8 +469,8 @@ static void draw_vector(WINDOW *win, const struct Conf *config, double az0, doub
     }
     else
     {
-        int r0 = (int)round(rad_y - y0 * rad_y), c0 = (int)round(rad_x + x0 * rad_x);
-        int r1 = (int)round(rad_y - y1 * rad_y), c1 = (int)round(rad_x + x1 * rad_x);
+        int r0 = (int)round(row0), c0 = (int)round(col0);
+        int r1 = (int)round(row1), c1 = (int)round(col1);
         if (r0 != r1 || c0 != c1)
         {
             draw_line_ASCII(win, r0, c0, r1, c1);
@@ -515,10 +556,10 @@ void render_azimuthal_grid(WINDOW *win, const struct Conf *config)
     int height, width;
     getmaxyx(win, height, width);
     int maxy = height - 1;
-    int maxx = width - 1;
 
-    int rad_vertical = round(maxy / 2.0);
-    int rad_horizontal = round(maxx / 2.0);
+    // Zoomed in, the dome is bigger on screen, so finer steps fit
+    int tiles = config->zoom > 1 ? config->zoom : 1;
+    int rad_vertical = (int)round(maxy / 2.0) * tiles;
 
     // Possible step sizes in degrees (multiples of 5 and factors of 90)
     int step_sizes[5] = {10, 15, 30, 45, 90};
@@ -565,16 +606,28 @@ void render_azimuthal_grid(WINDOW *win, const struct Conf *config)
             int angle = angles[i] + 90 * quad;
             double drawn = angle * to_rad + config->rotation;
 
-            int y = rad_vertical - round(rad_vertical * sin(drawn));
-            int x = rad_horizontal + round(rad_horizontal * cos(drawn));
+            // A spoke from the zenith to the horizon, through the (zoomed) view
+            double zx = 0.0, zy = 0.0;
+            double hx = cos(drawn), hy = sin(drawn);
+            view_zoom(config, &zx, &zy);
+            view_zoom(config, &hx, &hy);
+            double row, col;
+            view_to_cell(win, zx, zy, &row, &col);
+            int center_y = (int)round(row), center_x = (int)round(col);
+            view_to_cell(win, hx, hy, &row, &col);
+            int y = (int)round(row), x = (int)round(col);
 
             if (config->unicode)
             {
-                draw_line_smooth(win, y, x, rad_vertical, rad_horizontal);
+                draw_line_smooth(win, y, x, center_y, center_x);
             }
             else
             {
-                draw_line_ASCII(win, y, x, rad_vertical, rad_horizontal);
+                draw_line_ASCII(win, y, x, center_y, center_x);
+            }
+            if (!view_visible(0.0, hx, hy))
+            {
+                continue; // Its label would be off screen
             }
 
             int str_len = snprintf(NULL, 0, "%d", angle);
@@ -587,7 +640,7 @@ void render_azimuthal_grid(WINDOW *win, const struct Conf *config)
             snprintf(label, str_len + 1, "%d", angle);
 
             // Offset to avoid truncating string
-            int x_off = (x < rad_horizontal) ? 0 : -(str_len - 1);
+            int x_off = (hx < 0.0) ? 0 : -(str_len - 1);
 
             mvwaddstr(win, y, x + x_off, label);
 
@@ -623,13 +676,17 @@ void render_cardinal_directions(WINDOW *win, const struct Conf *config)
     const char letters[4] = {'N', 'E', 'S', 'W'};
     for (int i = 0; i < 4; ++i)
     {
-        double radius, theta;
-        horizontal_to_polar(config, i * M_PI / 2.0, 0.0, &radius, &theta);
+        double view_x, view_y;
+        sky_to_view(config, i * M_PI / 2.0, 0.0, &view_x, &view_y);
+        if (config->zoom > 1 && !view_visible(0.0, view_x, view_y))
+        {
+            continue; // That horizon is not in this tile
+        }
 
-        int y, x;
-        polar_to_win(radius, theta, height, width, &y, &x);
-        y = MAX(0, MIN(maxy, y));
-        x = MAX(0, MIN(maxx, x));
+        double row, col;
+        view_to_cell(win, view_x, view_y, &row, &col);
+        int y = MAX(0, MIN(maxy, (int)round(row)));
+        int x = MAX(0, MIN(maxx, (int)round(col)));
         mvwaddch(win, y, x, letters[i]);
     }
 

@@ -55,9 +55,12 @@ hidden (a toast explains), so `--datetime` in the past never draws satellites th
 ### D5. Data: fetched before the UI, politely
 `src/feed.c` resolves the cache dir (`$XDG_CACHE_HOME/astroterm` › `~/.cache/astroterm`, created 0700; relative
 `XDG_CACHE_HOME` ignored). At launch, **before `initscr`**, if any satellite layer is on and not `--offline`, each
-feed in use older than 12 h is refreshed, and Starlink when not in use only when older than 14 days (Oskar,
-2026-09-25: "definitely NOT" on every launch; two weeks matches the element-age limit). The Starlink catalog loads
-only when its layer is first turned on. Refreshes happen unless a marker file shows an attempt in the last 2 h
+the stations feed is refreshed when older than 12 h (3.5 KB). Starlink is never fetched without consent (Oskar,
+2026-09-25: "we don't want to force a download ever, and the user might be on slow or no internet"): enabling it
+shows the cache at once and asks only when the cache is over 14 days old (his cadence, matching the element-age
+limit) or missing; `U` asks at any time. Accepted downloads run in the background (spawned `curl`, polled with
+`waitpid(WNOHANG)` each frame, cancelled on quit) so a slow link never freezes the sky. The catalog loads only
+when the layer is first turned on. Refreshes happen unless a marker file shows an attempt in the last 2 h
 (CelesTrak answers repeats with 403 until its next update). The download runs `curl -q -sS --proto =https
 --proto-redir =https --max-filesize 20M --connect-timeout 5 --max-time 60 -w %{http_code}` via `posix_spawnp`
 (argv, no shell) into a `mkstemp` file, then waits. HTTP 200 with ≥ 1 valid row, and at least half the previous

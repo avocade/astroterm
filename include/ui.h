@@ -67,6 +67,10 @@ void ui_draw_help(const struct Conf *config, const struct SimClock *clock, attr_
  */
 void ui_draw_corner(WINDOW *sky_win, const char *const *lines, int num_lines, attr_t attr);
 
+/* Describe the zoomed view, e.g. "Zoom 2x ▖ SE 38° up" (or "Zoom: whole sky")
+ */
+void ui_view_text(const struct Conf *config, char *buf, size_t len);
+
 /* Human readable speed, e.g. "60x" or "paused (60x)"
  */
 void ui_speed_text(const struct SimClock *clock, char *buf, size_t len);

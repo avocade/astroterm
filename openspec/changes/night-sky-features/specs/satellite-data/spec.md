@@ -10,20 +10,16 @@ fresher is available.
 - **THEN** Starlink is drawn from it and the launch toast notes "data 5 d old"
 
 ### Requirement: Refresh before the UI starts
-The application SHALL refresh feeds at launch, when a satellite layer is on and `--offline` is not given: each
-feed in use (stations when on, Starlink when started with `--starlink`) when older than 12 hours, and the Starlink
-feed when not in use only when missing or older than 14 days (the element-age limit). Refreshes SHALL happen from `https://celestrak.org/NORAD/elements/gp.php?GROUP=<stations|starlink>&FORMAT=csv` before curses
+The application SHALL refresh the stations feed at launch, when stations are on, `--offline` is not given and the
+feed is older than 12 hours. The Starlink feed SHALL never be fetched at launch: only after the user consents (see
+starlink-overlay). Refreshes SHALL happen from `https://celestrak.org/NORAD/elements/gp.php?GROUP=<stations|starlink>&FORMAT=csv` before curses
 starts, by running `curl` without a shell into a unique temporary file, unless an attempt for that feed was made
 in the last 2 hours. The download SHALL replace the feed only on HTTP 200 with at least one valid row and at least
 half the previous row count. HTTP 403 SHALL be reported as "CelesTrak: not updated yet" and leave the cache as is.
 
 #### Scenario: First run online
 - **WHEN** stations are on, there is no cache and the network is up
-- **THEN** both feeds are downloaded before the first frame
-
-#### Scenario: Starlink kept warm, not fresh
-- **WHEN** Starlink is off, stations are on and the Starlink cache is 13 days old
-- **THEN** only the stations feed is refreshed, and the Starlink catalog is not loaded until `x` is pressed
+- **THEN** the stations feed is downloaded before the first frame, and Starlink is not
 
 #### Scenario: Truncated download
 - **WHEN** the download yields 3,000 rows and the cache holds 10,000

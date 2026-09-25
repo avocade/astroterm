@@ -18,9 +18,13 @@ its toast text.
 | `x` | Starlink overlay on/off |
 | `X` | also show Starlinks in Earth's shadow (dimmed) |
 | `v` | motion vectors on/off |
+| `U` | ask to update the Starlink data now |
+| `z` / `Z` | zoom in / out: 1x (whole sky), 2x (quadrants), 4x (4×4 tiles) |
+| `h j k l`, arrows | move one tile left/down/up/right when zoomed |
+| `1`–`4` | look at a quadrant (2x): top-left, top-right, bottom-left, bottom-right |
+| `[` / `]`, `R` | rotate the dome 15°, reset the view (1x, no rotation) |
 | `+`/`=`, `-` | magnitude threshold ±0.5 (bounded −1.5 … 8.0) |
 | `space`, `>`/`.`, `<`/`,`, `n` | pause, faster, slower, now (see sim-clock) |
-| `←`, `→`, `↓` | rotate the dome 15° left/right, reset |
 | `?` | help modal |
 | `q`, `ESC` | quit (`ESC` closes the help modal first) |
 
@@ -75,8 +79,34 @@ still register within 100 ms on ncurses.
 - **THEN** the application keeps running
 
 ### Requirement: Face the sky
-`←`/`→` SHALL rotate the whole dome (objects, lines, grid, cardinal letters) by 15° per press; `↓` SHALL reset.
+`[`/`]` SHALL rotate the whole dome (objects, lines, grid, cardinal letters) by 15° per press; `R` SHALL reset
+rotation and zoom.
 
 #### Scenario: Facing south
-- **WHEN** the user presses `→` twelve times
+- **WHEN** the user presses `]` twelve times
 - **THEN** "S" is at the top of the dome and "N" at the bottom
+
+### Requirement: Zoom into tiles of the sky
+The application SHALL offer three zoom levels: 1x shows the whole sky exactly as upstream does; 2x shows one of
+the window's four quadrants; 4x one tile of a 4×4 grid. `z`/`Z` SHALL zoom in/out (zooming out goes to the
+quadrant containing the tile; zooming in goes to the sub-tile nearest the zenith, bottom-left from 1x).
+`h j k l` and the arrow keys SHALL move one tile, stopping at the edges. `1`–`4` SHALL show that quadrant at 2x
+from any level. Every layer SHALL follow the view, and nothing below the horizon or outside the window SHALL be
+drawn. While zoomed, the corner SHALL show the level, a minimap of the current tile, and the compass direction and
+altitude at the tile's centre.
+
+#### Scenario: Default is the whole sky
+- **WHEN** astroterm starts
+- **THEN** zoom is 1x and the sky looks as it does upstream
+
+#### Scenario: Jump to a quadrant
+- **WHEN** the view is 1x with no rotation and the user presses `3`
+- **THEN** zoom is 2x on the bottom-left quadrant, looking south-east
+
+#### Scenario: Walk the tiles
+- **WHEN** zoom is 4x on the top-left tile and the user presses `l` three times and `h` once
+- **THEN** the view is on the third tile of the top row, and a further `k` stays put
+
+#### Scenario: Arrows at 1x
+- **WHEN** zoom is 1x and the user presses an arrow key
+- **THEN** nothing moves and the toast says to zoom in with `z` first

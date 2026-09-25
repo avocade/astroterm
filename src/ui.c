@@ -1,5 +1,6 @@
 #include "ui.h"
 #include "macros.h"
+#include "satellite.h"
 #include "term.h"
 
 #include <math.h>
@@ -35,7 +36,14 @@ enum UiCommand
     CMD_NOW,
     CMD_ROT_LEFT,
     CMD_ROT_RIGHT,
-    CMD_ROT_RESET,
+    CMD_RESET_VIEW,
+    CMD_ZOOM_IN,
+    CMD_ZOOM_OUT,
+    CMD_PAN_LEFT,
+    CMD_PAN_RIGHT,
+    CMD_PAN_UP,
+    CMD_PAN_DOWN,
+    CMD_QUADRANT,
     CMD_HELP,
     CMD_QUIT,
 };
@@ -46,8 +54,8 @@ struct KeyRow
 {
     const char *keys;
     const char *label;
-    int key[3];
-    enum UiCommand cmd[3];
+    int key[8];
+    enum UiCommand cmd[8];
 };
 
 // The single source of truth for keys, help rows and dispatch
@@ -68,7 +76,14 @@ static const struct KeyRow key_rows[] = {
     {"< >", "Speed", {'<', ',', '>'}, {CMD_SLOWER, CMD_SLOWER, CMD_FASTER}},
     {"", "", {'.'}, {CMD_FASTER}}, // Unshifted '>' on most layouts
     {"n", "Back to now", {'n'}, {CMD_NOW}},
-    {"arrows", "Rotate dome (down: reset)", {KEY_LEFT, KEY_RIGHT, KEY_DOWN}, {CMD_ROT_LEFT, CMD_ROT_RIGHT, CMD_ROT_RESET}},
+    {"z Z", "Zoom in / out", {'z', 'Z'}, {CMD_ZOOM_IN, CMD_ZOOM_OUT}},
+    {"hjkl",
+     "Move around when zoomed (or arrows)",
+     {'h', 'j', 'k', 'l', KEY_LEFT, KEY_DOWN, KEY_UP, KEY_RIGHT},
+     {CMD_PAN_LEFT, CMD_PAN_DOWN, CMD_PAN_UP, CMD_PAN_RIGHT, CMD_PAN_LEFT, CMD_PAN_DOWN, CMD_PAN_UP, CMD_PAN_RIGHT}},
+    {"1-4", "Look at a quadrant", {'1', '2', '3', '4'}, {CMD_QUADRANT, CMD_QUADRANT, CMD_QUADRANT, CMD_QUADRANT}},
+    {"[ ]", "Rotate the dome", {'[', ']'}, {CMD_ROT_LEFT, CMD_ROT_RIGHT}},
+    {"R", "Reset view", {'R'}, {CMD_RESET_VIEW}},
     {"?", "This help", {'?'}, {CMD_HELP}},
     {"q ESC", "Quit (ESC closes help)", {'q', KEY_ESCAPE}, {CMD_QUIT, CMD_QUIT}},
 };
@@ -79,7 +94,7 @@ static enum UiCommand lookup(int ch)
 {
     for (unsigned int i = 0; i < NUM_KEY_ROWS; ++i)
     {
-        for (int k = 0; k < 3; ++k)
+        for (int k = 0; k < 8; ++k)
         {
             if (key_rows[i].cmd[k] != CMD_NONE && key_rows[i].key[k] == ch)
             {
@@ -125,6 +140,60 @@ void ui_speed_text(const struct SimClock *clock, char *buf, size_t len)
     }
 }
 
+void ui_view_text(const struct Conf *config, char *buf, size_t len)
+{
+    int tiles = config->zoom > 1 ? config->zoom : 1;
+    if (tiles == 1)
+    {
+        snprintf(buf, len, "Zoom: whole sky");
+        return;
+    }
+
+    // What the centre of the tile looks at: invert the stereographic projection
+    double cx = -1.0 + (2.0 * config->tile_x + 1.0) / tiles;
+    double cy = 1.0 - (2.0 * config->tile_y + 1.0) / tiles;
+    double radius = fmin(1.0, hypot(cx, cy));
+    double azimuth = atan2(cy, cx) - config->rotation - M_PI / 2.0;
+    double altitude = M_PI / 2.0 - 2.0 * atan(radius);
+
+    // A minimap: a quadrant block at 2x, a 4x4 grid of braille dots at 4x
+    char map[16];
+    if (!config->unicode)
+    {
+        snprintf(map, sizeof(map), "(%d,%d)", config->tile_x + 1, config->tile_y + 1);
+    }
+    else if (tiles == 2)
+    {
+        static const char *quadrants[4] = {"▘", "▝", "▖", "▗"};
+        snprintf(map, sizeof(map), "%s", quadrants[config->tile_y * 2 + config->tile_x]);
+    }
+    else
+    {
+        static const unsigned char dots[4][2] = {{0x01, 0x08}, {0x02, 0x10}, {0x04, 0x20}, {0x40, 0x80}};
+        unsigned char cells[2] = {0, 0};
+        cells[config->tile_x / 2] = dots[config->tile_y % 4][config->tile_x % 2];
+        int n = 0;
+        map[n++] = '[';
+        for (int c = 0; c < 2; ++c)
+        {
+            map[n++] = (char)0xE2;
+            map[n++] = (char)(0xA0 | (cells[c] >> 6));
+            map[n++] = (char)(0x80 | (cells[c] & 0x3F));
+        }
+        map[n++] = ']';
+        map[n] = '\0';
+    }
+
+    if (altitude < 1.0 * M_PI / 180.0)
+    {
+        snprintf(buf, len, "Zoom %dx %s %s horizon", tiles, map, compass_point(azimuth));
+    }
+    else
+    {
+        snprintf(buf, len, "Zoom %dx %s %s %.0f° up", tiles, map, compass_point(azimuth), altitude * 180.0 / M_PI);
+    }
+}
+
 static double rotation_degrees(const struct Conf *config)
 {
     double deg = fmod(config->rotation * 180.0 / M_PI, 360.0);
@@ -140,7 +209,7 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
     }
 
     enum UiCommand cmd = lookup(ch);
-    char speed[32];
+    char speed[64];
 
     switch (cmd)
     {
@@ -266,17 +335,90 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
 
     case CMD_ROT_LEFT:
     case CMD_ROT_RIGHT:
-    case CMD_ROT_RESET:
-        if (cmd == CMD_ROT_RESET)
+        config->rotation += cmd == CMD_ROT_RIGHT ? ROTATION_STEP : -ROTATION_STEP;
+        config->rotation = fmod(config->rotation, 2.0 * M_PI);
+        ui_toast(ui, ctx->mono, "Rotation: %.0f°", rotation_degrees(config));
+        return UI_NONE;
+
+    case CMD_RESET_VIEW:
+        config->rotation = 0.0;
+        config->zoom = 1;
+        config->tile_x = config->tile_y = 0;
+        ui_toast(ui, ctx->mono, "View reset: whole sky, north up");
+        return UI_NONE;
+
+    case CMD_ZOOM_IN:
+        if (config->zoom >= 4)
         {
-            config->rotation = 0.0;
+            ui_toast(ui, ctx->mono, "Zoom: 4x is the closest");
+            return UI_NONE;
+        }
+        if (config->zoom <= 1)
+        {
+            // All four quadrants meet at the zenith: start bottom-left
+            config->zoom = 2;
+            config->tile_x = 0;
+            config->tile_y = 1;
         }
         else
         {
-            config->rotation += cmd == CMD_ROT_RIGHT ? ROTATION_STEP : -ROTATION_STEP;
-            config->rotation = fmod(config->rotation, 2.0 * M_PI);
+            // Keep the part of the quadrant nearest the zenith
+            config->zoom = 4;
+            config->tile_x = 2 * config->tile_x + (1 - config->tile_x);
+            config->tile_y = 2 * config->tile_y + (1 - config->tile_y);
         }
-        ui_toast(ui, ctx->mono, "Rotation: %.0f°", rotation_degrees(config));
+        ui_view_text(config, speed, sizeof(speed));
+        ui_toast(ui, ctx->mono, "%s", speed);
+        return UI_NONE;
+
+    case CMD_ZOOM_OUT:
+        if (config->zoom <= 1)
+        {
+            ui_toast(ui, ctx->mono, "Zoom: whole sky");
+            return UI_NONE;
+        }
+        config->zoom /= 2;
+        config->tile_x /= 2;
+        config->tile_y /= 2;
+        if (config->zoom <= 1)
+        {
+            config->tile_x = config->tile_y = 0;
+            ui_toast(ui, ctx->mono, "Zoom: whole sky");
+            return UI_NONE;
+        }
+        ui_view_text(config, speed, sizeof(speed));
+        ui_toast(ui, ctx->mono, "%s", speed);
+        return UI_NONE;
+
+    case CMD_PAN_LEFT:
+    case CMD_PAN_RIGHT:
+    case CMD_PAN_UP:
+    case CMD_PAN_DOWN: {
+        if (config->zoom <= 1)
+        {
+            ui_toast(ui, ctx->mono, "Zoom in with z to move around");
+            return UI_NONE;
+        }
+        int x = config->tile_x + (cmd == CMD_PAN_RIGHT) - (cmd == CMD_PAN_LEFT);
+        int y = config->tile_y + (cmd == CMD_PAN_DOWN) - (cmd == CMD_PAN_UP);
+        if (x < 0 || y < 0 || x >= config->zoom || y >= config->zoom)
+        {
+            ui_toast(ui, ctx->mono, "Edge of the sky");
+            return UI_NONE;
+        }
+        config->tile_x = x;
+        config->tile_y = y;
+        ui_view_text(config, speed, sizeof(speed));
+        ui_toast(ui, ctx->mono, "%s", speed);
+        return UI_NONE;
+    }
+
+    case CMD_QUADRANT:
+        config->zoom = 2;
+        config->tile_x = (ch - '1') % 2;
+        config->tile_y = (ch - '1') / 2;
+        ui_view_text(config, speed, sizeof(speed));
+        ui_toast(ui, ctx->mono, "%s", speed);
         return UI_NONE;
 
     case CMD_HELP:
@@ -344,6 +486,9 @@ static void state_text(enum UiCommand cmd, const struct Conf *config, const stru
         break;
     case CMD_ROT_LEFT:
         snprintf(buf, len, "%.0f°", rotation_degrees(config));
+        break;
+    case CMD_ZOOM_IN:
+        snprintf(buf, len, "%dx", config->zoom > 1 ? config->zoom : 1);
         break;
     default:
         break;
