@@ -281,6 +281,7 @@ Press <kbd>?</kbd> at any time for a help overlay that shows every key and its c
 | <kbd>i</kbd> | Space stations (ISS, Tiangong) |
 | <kbd>x</kbd> / <kbd>X</kbd> | Starlink (sunlit ones) / also those in Earth's shadow |
 | <kbd>v</kbd> | Motion vectors |
+| <kbd>U</kbd> | Update the Starlink data (asks first) |
 | <kbd>+</kbd> <kbd>-</kbd> | Show fainter or fewer stars |
 | <kbd>space</kbd> | Pause time |
 | <kbd><</kbd> <kbd>></kbd> | Slower or faster: 1x, 10x, 60x, 600x, 3600x |
@@ -307,13 +308,18 @@ and how high it gets. A visible pass is one where the station is lit by the Sun 
 is coming in the next three days, the line shows the next pass anyway, marked as daylight or twilight.
 
 Starlink satellites that are in sunlight, the ones you could actually see, appear as single braille dots beneath the
-stars. Press <kbd>X</kbd> to also see the ones in Earth's shadow.
+stars. Press <kbd>X</kbd> to also see the ones in Earth's shadow. Starlink is off by default: at any moment several
+hundred are above you.
+
+astroterm never downloads Starlink data without asking. Turning the layer on shows whatever is cached right away;
+it only asks to refresh when that data is more than two weeks old (or to download it when there is none), and
+<kbd>U</kbd> asks at any time. A download you accept runs in the background, so a slow connection never freezes the
+sky.
 
 Positions are computed with SGP4 from [CelesTrak](https://celestrak.org) orbital elements. astroterm keeps them in
-`$XDG_CACHE_HOME/astroterm` (usually `~/.cache/astroterm`) and refreshes them with `curl` when you start it: the
-space stations when older than 12 hours, Starlink when older than 12 hours if you start with `--starlink`, and
-otherwise only every two weeks, so <kbd>x</kbd> still works where there is no signal. It asks at most once every
-two hours, which is how often CelesTrak updates.
+`$XDG_CACHE_HOME/astroterm` (usually `~/.cache/astroterm`) and refreshes the small space-station file with `curl`
+when you start it, if it is older than 12 hours. It never asks CelesTrak more than once every two hours, which is
+how often CelesTrak updates.
 Nothing is sent except those requests, and `--offline` turns off the network entirely. Elements more than 14 days
 away from the time you are looking at are not drawn, because they would put satellites in the wrong place.
 
@@ -321,7 +327,7 @@ away from the time you are looking at are not drawn, because they would put sate
 
 Night vision draws only red on black, but astroterm cannot dim what it does not draw. Before you go out:
 
-1. Run astroterm once while you still have a connection, so the satellite data is cached.
+1. Run astroterm once while you still have a connection, and press <kbd>x</kbd> once, so the ISS and Starlink data is cached.
 2. Set your location: `astroterm -i Stockholm` or `-a <latitude> -o <longitude>`.
 3. Turn the screen brightness all the way down and switch off the keyboard backlight.
 4. Make the terminal full screen and hide anything bright around it (for tmux: `tmux set status off`).

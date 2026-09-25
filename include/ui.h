@@ -23,13 +23,18 @@ enum UiAction
 {
     UI_NONE = 0,
     UI_QUIT,
-    UI_STARLINK,   // Starlink turned on: load if needed, update now, report counts
-    UI_SATELLITES, // Satellite state needs recomputing now (e.g. vectors on)
+    UI_STARLINK,        // Starlink turned on: load if needed, update now, report counts
+    UI_SATELLITES,      // Satellite state needs recomputing now (e.g. vectors on)
+    UI_STARLINK_UPDATE, // U: offer to refresh the Starlink data
+    UI_ANSWER_YES,      // The open question was answered y
+    UI_ANSWER_NO,       // ... or anything else
 };
 
 struct UiState
 {
     bool help_open;
+    bool prompt_open; // A y/N question is waiting; it takes the next key
+    char prompt[UI_TOAST_LEN];
     char toast[UI_TOAST_LEN];
     double toast_until; // Monotonic seconds
 };
@@ -52,6 +57,14 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
 /* Show a toast for UI_TOAST_SECONDS
  */
 void ui_toast(struct UiState *ui, double mono, const char *fmt, ...);
+
+/* Ask a y/N question: the next key answers it
+ */
+void ui_ask(struct UiState *ui, const char *fmt, ...);
+
+/* Draw the open question centred on the screen
+ */
+void ui_draw_prompt(const struct UiState *ui, attr_t attr);
 
 /* Current toast text, or NULL if none is showing
  */

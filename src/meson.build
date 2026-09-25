@@ -17,6 +17,7 @@ project_source_files += [
     files('omm.c'),
     files('satellite.c'),
     files('feed.c'),
+    files('sat_layers.c'),
 ]
 
 # NOTE: We add main.c separately in the root Meson.build file to avoid duplicate "main" functions when compiling tests

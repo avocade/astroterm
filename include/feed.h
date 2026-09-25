@@ -46,4 +46,39 @@ char *feed_read(enum FeedId id, size_t *len_out);
  */
 void feed_refresh(const double max_age_hours[NUM_FEEDS], char *message, size_t len);
 
+/* A download running in the background (for a layer turned on mid-session)
+ */
+struct FeedDownload
+{
+    bool active;
+    enum FeedId id;
+    long pid;
+    int status_fd;
+    char tmp[1024];
+};
+
+enum FeedStart
+{
+    FEED_START_OK,
+    FEED_START_TOO_SOON, // Asked within FEED_RETRY_HOURS: CelesTrak would answer 403
+    FEED_START_NO_CURL,
+    FEED_START_ERROR,
+    FEED_START_UNSUPPORTED, // Windows
+};
+
+/* Start downloading a feed without blocking. On FEED_START_TOO_SOON,
+ * *minutes_to_wait says when to try again
+ */
+enum FeedStart feed_download_start(enum FeedId id, struct FeedDownload *download, double *minutes_to_wait);
+
+/* Check on a background download. Returns true once it has finished; then
+ * *updated tells whether the cache was replaced, and `message` holds the
+ * problem if not
+ */
+bool feed_download_poll(struct FeedDownload *download, bool *updated, char *message, size_t len);
+
+/* Stop a background download and remove its temporary file
+ */
+void feed_download_cancel(struct FeedDownload *download);
+
 #endif // FEED_H

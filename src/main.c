@@ -7,6 +7,7 @@
 #include "macros.h"
 #include "omm.h"
 #include "parse_BSC5.h"
+#include "sat_layers.h"
 #include "satellite.h"
 #include "sim_clock.h"
 #include "stopwatch.h"
@@ -60,29 +61,6 @@ static double julian_date_start = 0.0; // Note of when we started
 static struct SimClock sim_clock;
 
 static const long station_catnrs[] = {CATNR_ISS, CATNR_TIANGONG};
-
-/* Load a cached feed into a catalog (empty when there is no usable data)
- */
-static void load_catalog(enum FeedId id, const long *only, int num_only, struct SatCatalog *out)
-{
-    out->sats = NULL;
-    out->count = 0;
-
-    size_t len;
-    char *data = feed_read(id, &len);
-    if (data == NULL)
-    {
-        return;
-    }
-    struct OmmRecord *records = NULL;
-    int n = omm_parse_csv(data, len, &records);
-    free(data);
-    if (n > 0)
-    {
-        satellite_catalog_build(records, n, only, num_only, out);
-    }
-    free(records);
-}
 
 /* Local clock time of a Julian date, with the weekday when not on `today_jd`
  */
@@ -242,33 +220,20 @@ int main(int argc, char *argv[])
 
     // Satellite data is refreshed before the UI starts (see feed.h)
     char data_message[128] = "";
-    if ((config.stations || config.starlink) && !config.offline)
+    if (config.stations && !config.offline)
     {
-        // Feeds in use stay fresh; Starlink is otherwise only kept warm (so
-        // 'x' works where there is no signal), refreshed every two weeks
-        double max_age[NUM_FEEDS];
-        max_age[FEED_STATIONS] = config.stations ? FEED_MAX_AGE_HOURS : FEED_SKIP;
-        max_age[FEED_STARLINK] = config.starlink ? FEED_MAX_AGE_HOURS : FEED_BACKGROUND_MAX_AGE_HOURS;
+        // Only the small stations feed, and only when stale. Starlink is never
+        // downloaded without asking (see sat_layers.h)
+        double max_age[NUM_FEEDS] = {FEED_MAX_AGE_HOURS, FEED_SKIP};
         feed_refresh(max_age, data_message, sizeof(data_message));
     }
     struct SatCatalog stations;
-    load_catalog(FEED_STATIONS, station_catnrs, 2, &stations);
+    sat_catalog_from_feed(FEED_STATIONS, station_catnrs, 2, &stations);
 
-    // Starlink (~11k satellites) is loaded only once it is wanted
-    struct SatCatalog starlink = {0};
-    bool starlink_loaded = false;
-    if (config.starlink)
-    {
-        load_catalog(FEED_STARLINK, NULL, 0, &starlink);
-        starlink_loaded = true;
-    }
-
-    // Starlink is propagated at most this often (wall clock), at any speed
+    // Starlink (~11k satellites) is loaded once it is wanted, and propagated at
+    // most this often (wall clock), at any speed
+    struct StarlinkLayer starlink = {0};
     const double starlink_period = 0.25;
-    double starlink_updated = -1.0e9;
-    bool starlink_toast = false;
-    int starlink_above = 0;
-    int starlink_sunlit = 0;
     struct BrailleCanvas starlink_lit = {0};
     struct BrailleCanvas starlink_dark = {0};
     struct BrailleCanvas vector_canvas = {0};
@@ -328,6 +293,11 @@ int main(int argc, char *argv[])
     // Window backgrounds follow night vision (applied when it changes)
     bool background_night = !config.night;
 
+    if (config.starlink)
+    {
+        starlink_enable(&starlink, &config, &ui, clock_monotonic_s());
+    }
+
     // Render loop
     bool quit = false;
     while (!quit)
@@ -380,42 +350,17 @@ int main(int argc, char *argv[])
             satellite_update(&stations.sats[i], julian_date, config.latitude, config.longitude, sun_dir, config.vectors);
         }
 
-        double mono_now = clock_monotonic_s();
-        if (config.starlink && mono_now - starlink_updated >= starlink_period)
-        {
-            starlink_updated = mono_now;
-            starlink_above = starlink_sunlit = 0;
-            for (int i = 0; i < starlink.count; ++i)
-            {
-                struct Satellite *sat = &starlink.sats[i];
-                satellite_update(sat, julian_date, config.latitude, config.longitude, sun_dir, config.vectors);
-                if (sat->ok && sat->altitude > 0.0)
-                {
-                    starlink_above++;
-                    starlink_sunlit += sat->sunlit;
-                }
-            }
-            if (starlink_toast)
-            {
-                double age_days = feed_age_hours(FEED_STARLINK) / 24.0;
-                char age[32] = "";
-                if (age_days >= 2.0)
-                {
-                    snprintf(age, sizeof(age), " (data %.0f days old)", age_days);
-                }
-                ui_toast(&ui, mono_now, "Starlink: %d sunlit of %d above the horizon%s", starlink_sunlit, starlink_above, age);
-                starlink_toast = false;
-            }
-        }
+        starlink_tick(&starlink, &config, &ui, julian_date, sun_dir, clock_monotonic_s(), starlink_period);
 
         // Render objects, bottom layer first
         if (config.vectors)
         {
-            render_vectors(main_win, &config, julian_date, planet_table, &moon_object, &stations, &starlink, &vector_canvas);
+            render_vectors(main_win, &config, julian_date, planet_table, &moon_object, &stations, &starlink.catalog,
+                           &vector_canvas);
         }
         if (config.starlink)
         {
-            render_starlink(main_win, &config, &starlink, &starlink_lit, &starlink_dark);
+            render_starlink(main_win, &config, &starlink.catalog, &starlink_lit, &starlink_dark);
         }
         render_stars_stereo(main_win, &config, star_table, num_stars, num_by_mag);
         if (config.constell)
@@ -453,6 +398,10 @@ int main(int argc, char *argv[])
             ui_view_text(&config, view_line, sizeof(view_line));
         }
         const char *toast = ui_current_toast(&ui, mono);
+        if (toast == NULL)
+        {
+            toast = starlink_status(&starlink);
+        }
         const char *corner[3] = {view_line, iss_line, toast};
         if (toast != NULL && strcmp(toast, view_line) == 0)
         {
@@ -470,6 +419,10 @@ int main(int argc, char *argv[])
         if (ui.help_open)
         {
             ui_draw_help(&config, &sim_clock, palette_background(config.night));
+        }
+        if (ui.prompt_open)
+        {
+            ui_draw_prompt(&ui, palette_background(config.night));
         }
         doupdate();
 
@@ -491,26 +444,19 @@ int main(int argc, char *argv[])
             }
             else if (action == UI_STARLINK)
             {
-                if (!starlink_loaded)
-                {
-                    load_catalog(FEED_STARLINK, NULL, 0, &starlink);
-                    starlink_loaded = true;
-                }
-                if (starlink.count == 0)
-                {
-                    config.starlink = false;
-                    ui_toast(&ui, clock_monotonic_s(), "Starlink: no data (run once online)");
-                }
-                else
-                {
-                    // Update now and report what is up
-                    starlink_updated = -1.0e9;
-                    starlink_toast = true;
-                }
+                starlink_enable(&starlink, &config, &ui, ctx.mono);
+            }
+            else if (action == UI_STARLINK_UPDATE)
+            {
+                starlink_offer_refresh(&starlink, &config, &ui, ctx.mono);
+            }
+            else if (action == UI_ANSWER_YES || action == UI_ANSWER_NO)
+            {
+                starlink_answer(&starlink, &config, &ui, action == UI_ANSWER_YES, ctx.mono);
             }
             else if (action == UI_SATELLITES)
             {
-                starlink_updated = -1.0e9;
+                starlink.updated_at = -1.0e9;
             }
         }
 
@@ -539,7 +485,7 @@ int main(int argc, char *argv[])
     free_moon_object(moon_object);
     free_star_names(name_table, num_stars);
     satellite_catalog_free(&stations);
-    satellite_catalog_free(&starlink);
+    starlink_free(&starlink);
     braille_canvas_free(&starlink_lit);
     braille_canvas_free(&starlink_dark);
     braille_canvas_free(&vector_canvas);

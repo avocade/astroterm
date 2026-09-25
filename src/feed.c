@@ -12,6 +12,7 @@
 #include <direct.h>
 #else
 #include <fcntl.h>
+#include <signal.h>
 #include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -202,9 +203,9 @@ enum FetchResult
     FETCH_ERROR,
 };
 
-/* Download one feed into `tmp_path`. Returns the HTTP status via `http`
+/* Start curl downloading `url` into `tmp_path`, with the HTTP status on a pipe
  */
-static enum FetchResult run_curl(const char *url, const char *tmp_path, int *http)
+static enum FetchResult spawn_curl(const char *url, const char *tmp_path, pid_t *pid_out, int *status_fd)
 {
     char curl[PATH_LEN];
     if (!find_program("curl", curl, sizeof(curl)))
@@ -233,7 +234,7 @@ static enum FetchResult run_curl(const char *url, const char *tmp_path, int *htt
                     "--connect-timeout",
                     "5",
                     "--max-time",
-                    "60",
+                    "120",
                     "-A",
                     "astroterm",
                     "-o",
@@ -250,8 +251,7 @@ static enum FetchResult run_curl(const char *url, const char *tmp_path, int *htt
     posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
     posix_spawn_file_actions_addclose(&actions, pipe_fd[0]);
 
-    pid_t pid;
-    int spawn_err = posix_spawn(&pid, curl, &actions, NULL, argv, environ);
+    int spawn_err = posix_spawn(pid_out, curl, &actions, NULL, argv, environ);
     posix_spawn_file_actions_destroy(&actions);
     close(pipe_fd[1]);
 
@@ -260,19 +260,34 @@ static enum FetchResult run_curl(const char *url, const char *tmp_path, int *htt
         close(pipe_fd[0]);
         return FETCH_NO_CURL;
     }
+    *status_fd = pipe_fd[0];
+    return FETCH_OK;
+}
 
-    char status[16] = "";
-    ssize_t n = read(pipe_fd[0], status, sizeof(status) - 1);
-    status[n > 0 ? n : 0] = '\0';
-    close(pipe_fd[0]);
-
+/* Wait for (or, without `block`, check on) a spawned curl. Sets *done; when
+ * done, returns the outcome and the HTTP status (0 if the server never answered)
+ */
+static enum FetchResult collect_curl(pid_t pid, int status_fd, bool block, bool *done, int *http)
+{
     int wstatus = 0;
-    while (waitpid(pid, &wstatus, 0) < 0 && errno == EINTR)
+    pid_t waited;
+    while ((waited = waitpid(pid, &wstatus, block ? 0 : WNOHANG)) < 0 && errno == EINTR)
     {
     }
+    *done = waited != 0;
+    if (!*done)
+    {
+        return FETCH_OK;
+    }
+
+    // curl has exited, so its status line is complete in the pipe
+    char status[16] = "";
+    ssize_t n = read(status_fd, status, sizeof(status) - 1);
+    status[n > 0 ? n : 0] = '\0';
+    close(status_fd);
     *http = atoi(status);
 
-    if (!WIFEXITED(wstatus))
+    if (waited < 0 || !WIFEXITED(wstatus))
     {
         return FETCH_ERROR;
     }
@@ -306,34 +321,16 @@ static void touch(const char *path)
     }
 }
 
-static enum FetchResult refresh_one(enum FeedId id, double max_age_hours)
+/* Record the attempt and, if the download is good, move it into place
+ */
+static enum FetchResult install(enum FeedId id, const char *tmp, enum FetchResult result, int http)
 {
-    char path[PATH_LEN], marker[PATH_LEN], tmp[PATH_LEN];
-    if (!feed_file(id, ".csv", path, sizeof(path)) || !feed_file(id, ".attempt", marker, sizeof(marker)) ||
-        !feed_file(id, ".csv.XXXXXX", tmp, sizeof(tmp)))
+    char path[PATH_LEN], marker[PATH_LEN];
+    if (!feed_file(id, ".csv", path, sizeof(path)) || !feed_file(id, ".attempt", marker, sizeof(marker)))
     {
+        unlink(tmp);
         return FETCH_ERROR;
     }
-
-    double age = file_age_hours(path);
-    double since_attempt = file_age_hours(marker);
-    if (max_age_hours < 0.0 || (age >= 0.0 && age < max_age_hours) ||
-        (since_attempt >= 0.0 && since_attempt < FEED_RETRY_HOURS))
-    {
-        return FETCH_OK; // Fresh enough, or asked recently
-    }
-
-    int fd = mkstemp(tmp);
-    if (fd < 0)
-    {
-        return FETCH_ERROR;
-    }
-    close(fd);
-
-    fprintf(stderr, "astroterm: updating satellite data (%s)...\n", feed_names[id]);
-
-    int http = 0;
-    enum FetchResult result = run_curl(feed_urls[id], tmp, &http);
 
     // The two-hour wait is politeness toward CelesTrak, so it only starts once
     // CelesTrak has actually answered (not when we were offline)
@@ -356,33 +353,89 @@ static enum FetchResult refresh_one(enum FeedId id, double max_age_hours)
     return result;
 }
 
+/* Hours until CelesTrak may be asked again, or 0 when it may be asked now
+ */
+static double hours_until_retry(enum FeedId id)
+{
+    char marker[PATH_LEN];
+    if (!feed_file(id, ".attempt", marker, sizeof(marker)))
+    {
+        return 0.0;
+    }
+    double since = file_age_hours(marker);
+    return since >= 0.0 && since < FEED_RETRY_HOURS ? FEED_RETRY_HOURS - since : 0.0;
+}
+
+static bool make_temp(enum FeedId id, char *tmp, size_t len)
+{
+    if (!feed_file(id, ".csv.XXXXXX", tmp, len))
+    {
+        return false;
+    }
+    int fd = mkstemp(tmp);
+    if (fd < 0)
+    {
+        return false;
+    }
+    close(fd);
+    return true;
+}
+
+static enum FetchResult refresh_one(enum FeedId id, double max_age_hours)
+{
+    double age = feed_age_hours(id);
+    if (max_age_hours < 0.0 || (age >= 0.0 && age < max_age_hours) || hours_until_retry(id) > 0.0)
+    {
+        return FETCH_OK; // Not wanted, fresh enough, or asked recently
+    }
+
+    char tmp[PATH_LEN];
+    if (!make_temp(id, tmp, sizeof(tmp)))
+    {
+        return FETCH_ERROR;
+    }
+
+    fprintf(stderr, "astroterm: updating satellite data (%s)...\n", feed_names[id]);
+
+    pid_t pid;
+    int status_fd;
+    int http = 0;
+    enum FetchResult result = spawn_curl(feed_urls[id], tmp, &pid, &status_fd);
+    if (result == FETCH_OK)
+    {
+        bool done;
+        result = collect_curl(pid, status_fd, true, &done, &http);
+    }
+    return install(id, tmp, result, http);
+}
+
+static const char *problem_text(enum FetchResult result)
+{
+    switch (result)
+    {
+    case FETCH_OK:
+        return NULL;
+    case FETCH_NO_CURL:
+        return "curl not found";
+    case FETCH_NETWORK:
+        return "no network";
+    case FETCH_RATE_LIMITED:
+        return "CelesTrak has not updated yet";
+    case FETCH_BAD_DATA:
+        return "download was incomplete";
+    case FETCH_ERROR:
+        return "download failed";
+    }
+    return "download failed";
+}
+
 void feed_refresh(const double max_age_hours[NUM_FEEDS], char *message, size_t len)
 {
     message[0] = '\0';
     for (int id = 0; id < NUM_FEEDS; ++id)
     {
         enum FetchResult result = refresh_one((enum FeedId)id, max_age_hours[id]);
-        const char *problem = NULL;
-        switch (result)
-        {
-        case FETCH_OK:
-            break;
-        case FETCH_NO_CURL:
-            problem = "curl not found";
-            break;
-        case FETCH_NETWORK:
-            problem = "no network";
-            break;
-        case FETCH_RATE_LIMITED:
-            problem = "CelesTrak has not updated yet";
-            break;
-        case FETCH_BAD_DATA:
-            problem = "download was incomplete";
-            break;
-        case FETCH_ERROR:
-            problem = "download failed";
-            break;
-        }
+        const char *problem = problem_text(result);
         if (problem != NULL)
         {
             snprintf(message, len, "Satellite data not refreshed: %s", problem);
@@ -394,12 +447,97 @@ void feed_refresh(const double max_age_hours[NUM_FEEDS], char *message, size_t l
     }
 }
 
+enum FeedStart feed_download_start(enum FeedId id, struct FeedDownload *download, double *minutes_to_wait)
+{
+    *minutes_to_wait = hours_until_retry(id) * 60.0;
+    if (*minutes_to_wait > 0.0)
+    {
+        return FEED_START_TOO_SOON;
+    }
+    if (!make_temp(id, download->tmp, sizeof(download->tmp)))
+    {
+        return FEED_START_ERROR;
+    }
+
+    pid_t pid;
+    if (spawn_curl(feed_urls[id], download->tmp, &pid, &download->status_fd) != FETCH_OK)
+    {
+        unlink(download->tmp);
+        return FEED_START_NO_CURL;
+    }
+    download->pid = (long)pid;
+    download->id = id;
+    download->active = true;
+    return FEED_START_OK;
+}
+
+bool feed_download_poll(struct FeedDownload *download, bool *updated, char *message, size_t len)
+{
+    *updated = false;
+    if (!download->active)
+    {
+        return false;
+    }
+
+    bool done;
+    int http = 0;
+    enum FetchResult result = collect_curl((pid_t)download->pid, download->status_fd, false, &done, &http);
+    if (!done)
+    {
+        return false;
+    }
+
+    download->active = false;
+    result = install(download->id, download->tmp, result, http);
+    *updated = result == FETCH_OK;
+    const char *problem = problem_text(result);
+    snprintf(message, len, "%s", problem != NULL ? problem : "");
+    return true;
+}
+
+void feed_download_cancel(struct FeedDownload *download)
+{
+    if (!download->active)
+    {
+        return;
+    }
+    kill((pid_t)download->pid, SIGTERM);
+    while (waitpid((pid_t)download->pid, NULL, 0) < 0 && errno == EINTR)
+    {
+    }
+    close(download->status_fd);
+    unlink(download->tmp);
+    download->active = false;
+}
+
 #else // _WIN32
 
 void feed_refresh(const double max_age_hours[NUM_FEEDS], char *message, size_t len)
 {
     (void)max_age_hours;
     snprintf(message, len, "Satellite downloads are not supported on Windows");
+}
+
+enum FeedStart feed_download_start(enum FeedId id, struct FeedDownload *download, double *minutes_to_wait)
+{
+    (void)id;
+    (void)download;
+    *minutes_to_wait = 0.0;
+    return FEED_START_UNSUPPORTED;
+}
+
+bool feed_download_poll(struct FeedDownload *download, bool *updated, char *message, size_t len)
+{
+    (void)download;
+    (void)message;
+    (void)len;
+    *updated = false;
+    return false;
+}
+
+void feed_download_cancel(struct FeedDownload *download)
+{
+    (void)download;
 }
 
 #endif // _WIN32

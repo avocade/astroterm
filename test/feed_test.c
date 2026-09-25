@@ -1,4 +1,5 @@
 #include "feed.h"
+#include "sat_layers.h"
 #include "unity.h"
 
 #include <stdio.h>
@@ -271,6 +272,147 @@ void test_skipped_feed_is_never_fetched(void)
     TEST_ASSERT_TRUE(feed_age_hours(FEED_STARLINK) < 0.0);
 }
 
+/* Poll a background download until it finishes (the fake curl is quick)
+ */
+static bool finish(struct FeedDownload *dl, bool *updated, char *msg, size_t len)
+{
+    for (int i = 0; i < 500; ++i)
+    {
+        if (feed_download_poll(dl, updated, msg, len))
+        {
+            return true;
+        }
+        usleep(10000);
+    }
+    return false;
+}
+
+void test_background_download(void)
+{
+    struct FeedDownload dl = {0};
+    double wait;
+    TEST_ASSERT_EQUAL_INT(FEED_START_OK, feed_download_start(FEED_STARLINK, &dl, &wait));
+    TEST_ASSERT_TRUE(dl.active);
+
+    bool updated;
+    char msg[96];
+    TEST_ASSERT_TRUE(finish(&dl, &updated, msg, sizeof(msg)));
+    TEST_ASSERT_TRUE(updated);
+    TEST_ASSERT_FALSE(dl.active);
+    TEST_ASSERT_TRUE(feed_age_hours(FEED_STARLINK) >= 0.0);
+
+    // CelesTrak answered, so asking again right away would earn a 403
+    TEST_ASSERT_EQUAL_INT(FEED_START_TOO_SOON, feed_download_start(FEED_STARLINK, &dl, &wait));
+    TEST_ASSERT_TRUE(wait > 100.0 && wait <= 120.0);
+}
+
+void test_background_download_cancel(void)
+{
+    // A download that would take a minute, cancelled when the user quits
+    char script[400];
+    snprintf(script, sizeof(script), "%s/curl", bin);
+    FILE *f = fopen(script, "w");
+    fprintf(f, "#!/bin/sh\nsleep 60\n");
+    fclose(f);
+
+    struct FeedDownload dl = {0};
+    double wait;
+    TEST_ASSERT_EQUAL_INT(FEED_START_OK, feed_download_start(FEED_STARLINK, &dl, &wait));
+    bool updated;
+    char msg[96];
+    TEST_ASSERT_FALSE(feed_download_poll(&dl, &updated, msg, sizeof(msg))); // Still running
+
+    feed_download_cancel(&dl);
+    TEST_ASSERT_FALSE(dl.active);
+    TEST_ASSERT_EQUAL_INT(-1, access(dl.tmp, F_OK)); // Temporary file gone
+    TEST_ASSERT_TRUE(feed_age_hours(FEED_STARLINK) < 0.0);
+}
+
+// Starlink is never downloaded without asking
+
+static void write_cache(const char *name, int rows, double age_hours)
+{
+    char path[400];
+    snprintf(path, sizeof(path), "%s/cache/astroterm", root);
+    mkdir(path, 0700); // May already exist
+    snprintf(path, sizeof(path), "%s/cache/astroterm/%s", root, name);
+    FILE *f = fopen(path, "w");
+    fputs(HEADER, f);
+    for (int i = 0; i < rows; ++i)
+    {
+        fprintf(f, "SAT,X,2026-09-24T03:24:21.452544,15.49,.0004691,51.63,170.34,174.63,185.47,0,U,%d,999,1,.18E-3,0,0\n",
+                1000 + i);
+    }
+    fclose(f);
+    age_file(name, age_hours);
+}
+
+void test_starlink_cached_shown_without_asking(void)
+{
+    char dir[400];
+    TEST_ASSERT_TRUE(feed_cache_dir(dir, sizeof(dir)));
+    write_cache("starlink.csv", 5, 3.0 * 24.0);
+
+    struct StarlinkLayer layer = {0};
+    struct Conf config = {.starlink = true};
+    struct UiState ui = {0};
+    starlink_enable(&layer, &config, &ui, 0.0);
+    TEST_ASSERT_EQUAL_INT(5, layer.catalog.count);
+    TEST_ASSERT_FALSE(ui.prompt_open);
+    TEST_ASSERT_EQUAL_INT(0, curl_calls());
+    starlink_free(&layer);
+}
+
+void test_starlink_old_cache_asks_and_no_keeps_it(void)
+{
+    char dir[400];
+    TEST_ASSERT_TRUE(feed_cache_dir(dir, sizeof(dir)));
+    write_cache("starlink.csv", 5, 16.0 * 24.0);
+
+    struct StarlinkLayer layer = {0};
+    struct Conf config = {.starlink = true};
+    struct UiState ui = {0};
+    starlink_enable(&layer, &config, &ui, 0.0);
+    TEST_ASSERT_EQUAL_INT(5, layer.catalog.count); // Shown at once
+    TEST_ASSERT_TRUE(ui.prompt_open);
+    TEST_ASSERT_NOT_NULL(strstr(ui.prompt, "16 days old"));
+
+    starlink_answer(&layer, &config, &ui, false, 0.0);
+    TEST_ASSERT_TRUE(config.starlink);
+    TEST_ASSERT_EQUAL_INT(0, curl_calls());
+    starlink_free(&layer);
+}
+
+void test_starlink_no_cache_asks_then_downloads(void)
+{
+    struct StarlinkLayer layer = {0};
+    struct Conf config = {.starlink = true};
+    struct UiState ui = {0};
+    starlink_enable(&layer, &config, &ui, 0.0);
+    TEST_ASSERT_TRUE(ui.prompt_open);
+    TEST_ASSERT_EQUAL_INT(0, curl_calls());
+
+    starlink_answer(&layer, &config, &ui, true, 0.0);
+    TEST_ASSERT_TRUE(layer.download.active);
+    bool updated;
+    char msg[96];
+    TEST_ASSERT_TRUE(finish(&layer.download, &updated, msg, sizeof(msg)));
+    TEST_ASSERT_TRUE(updated);
+    TEST_ASSERT_EQUAL_INT(1, curl_calls());
+    starlink_free(&layer);
+}
+
+void test_starlink_offline_never_asks(void)
+{
+    struct StarlinkLayer layer = {0};
+    struct Conf config = {.starlink = true, .offline = true};
+    struct UiState ui = {0};
+    starlink_enable(&layer, &config, &ui, 0.0);
+    TEST_ASSERT_FALSE(ui.prompt_open);
+    TEST_ASSERT_FALSE(config.starlink);
+    TEST_ASSERT_EQUAL_INT(0, curl_calls());
+}
+
 void test_curl_missing(void)
 {
     setenv("PATH", "/nonexistent", 1);
@@ -309,6 +451,12 @@ int main(void)
     RUN_TEST(test_offline_failure_does_not_block_retry);
     RUN_TEST(test_starlink_kept_warm_every_two_weeks);
     RUN_TEST(test_skipped_feed_is_never_fetched);
+    RUN_TEST(test_background_download);
+    RUN_TEST(test_background_download_cancel);
+    RUN_TEST(test_starlink_cached_shown_without_asking);
+    RUN_TEST(test_starlink_old_cache_asks_and_no_keeps_it);
+    RUN_TEST(test_starlink_no_cache_asks_then_downloads);
+    RUN_TEST(test_starlink_offline_never_asks);
     RUN_TEST(test_curl_missing);
     RUN_TEST(test_curl_args_are_hardened);
 

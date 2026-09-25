@@ -28,6 +28,7 @@ enum UiCommand
     CMD_STARLINK,
     CMD_STARLINK_DARK,
     CMD_VECTORS,
+    CMD_STARLINK_UPDATE,
     CMD_THRESH_UP,
     CMD_THRESH_DOWN,
     CMD_PAUSE,
@@ -71,6 +72,7 @@ static const struct KeyRow key_rows[] = {
     {"x", "Starlink", {'x'}, {CMD_STARLINK}},
     {"X", "Starlink in Earth's shadow", {'X'}, {CMD_STARLINK_DARK}},
     {"v", "Motion vectors", {'v'}, {CMD_VECTORS}},
+    {"U", "Update Starlink data (asks)", {'U'}, {CMD_STARLINK_UPDATE}},
     {"+ -", "Faintest stars (mag)", {'+', '=', '-'}, {CMD_THRESH_UP, CMD_THRESH_UP, CMD_THRESH_DOWN}},
     {"space", "Pause time", {' '}, {CMD_PAUSE}},
     {"< >", "Speed", {'<', ',', '>'}, {CMD_SLOWER, CMD_SLOWER, CMD_FASTER}},
@@ -117,6 +119,36 @@ void ui_toast(struct UiState *ui, double mono, const char *fmt, ...)
     vsnprintf(ui->toast, sizeof(ui->toast), fmt, args);
     va_end(args);
     ui->toast_until = mono + UI_TOAST_SECONDS;
+}
+
+void ui_ask(struct UiState *ui, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(ui->prompt, sizeof(ui->prompt), fmt, args);
+    va_end(args);
+    ui->prompt_open = true;
+}
+
+void ui_draw_prompt(const struct UiState *ui, attr_t attr)
+{
+    int w = MIN((int)strlen(ui->prompt) + 4, COLS);
+    int h = MIN(3, LINES);
+    if (w < 6 || h < 3)
+    {
+        return;
+    }
+    WINDOW *win = newwin(h, w, (LINES - h) / 2, (COLS - w) / 2);
+    if (win == NULL)
+    {
+        return;
+    }
+    wbkgd(win, attr);
+    werase(win);
+    box(win, 0, 0);
+    mvwaddstr_truncate(win, 1, 2, ui->prompt);
+    wnoutrefresh(win);
+    delwin(win);
 }
 
 const char *ui_current_toast(const struct UiState *ui, double mono)
@@ -206,6 +238,13 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
     if (config->quit_on_any)
     {
         return UI_QUIT;
+    }
+
+    // An open question takes the next key: y answers yes, anything else no
+    if (ui->prompt_open)
+    {
+        ui->prompt_open = false;
+        return (ch == 'y' || ch == 'Y') ? UI_ANSWER_YES : UI_ANSWER_NO;
     }
 
     enum UiCommand cmd = lookup(ch);
@@ -304,6 +343,9 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
         }
         ui_toast(ui, ctx->mono, "Vectors: off");
         return UI_NONE;
+
+    case CMD_STARLINK_UPDATE:
+        return UI_STARLINK_UPDATE;
 
     case CMD_THRESH_UP:
         config->threshold = MIN(THRESHOLD_MAX, config->threshold + THRESHOLD_STEP);

@@ -298,6 +298,26 @@ void test_vectors_toggle(void)
     TEST_ASSERT_FALSE(config.vectors);
 }
 
+void test_prompt_takes_the_next_key(void)
+{
+    ui_ask(&ui, "Download it now? y/N");
+    TEST_ASSERT_TRUE(ui.prompt_open);
+    TEST_ASSERT_EQUAL_INT(UI_ANSWER_YES, press('y'));
+    TEST_ASSERT_FALSE(ui.prompt_open);
+
+    // Any other key is a no, and does nothing else
+    ui_ask(&ui, "Download it now? y/N");
+    TEST_ASSERT_EQUAL_INT(UI_ANSWER_NO, press('g'));
+    TEST_ASSERT_FALSE(config.grid);
+
+    // Not even ESC or q quits while a question is open
+    ui_ask(&ui, "Download it now? y/N");
+    TEST_ASSERT_EQUAL_INT(UI_ANSWER_NO, press(27));
+    ui_ask(&ui, "Download it now? y/N");
+    TEST_ASSERT_EQUAL_INT(UI_ANSWER_NO, press('q'));
+    TEST_ASSERT_EQUAL_INT(UI_STARLINK_UPDATE, press('U'));
+}
+
 void test_quit_on_any(void)
 {
     config.quit_on_any = true;
@@ -334,6 +354,7 @@ int main(void)
     RUN_TEST(test_stations_toggle);
     RUN_TEST(test_starlink_toggle);
     RUN_TEST(test_vectors_toggle);
+    RUN_TEST(test_prompt_takes_the_next_key);
     RUN_TEST(test_quit_on_any);
     RUN_TEST(test_toast_expires);
 
