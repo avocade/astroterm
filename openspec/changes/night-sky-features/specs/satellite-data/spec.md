@@ -10,9 +10,9 @@ fresher is available.
 - **THEN** Starlink is drawn from it and the launch toast notes "data 5 d old"
 
 ### Requirement: Refresh before the UI starts
-At launch, if a satellite layer is on and `--offline` is not given, each feed in use (stations when on, Starlink
-when started with `--starlink`) older than 12 hours SHALL be refreshed, and the Starlink feed when not in use only
-when missing or older than 14 days (the element-age limit). Refreshes SHALL happen from `https://celestrak.org/NORAD/elements/gp.php?GROUP=<stations|starlink>&FORMAT=csv` before curses
+The application SHALL refresh feeds at launch, when a satellite layer is on and `--offline` is not given: each
+feed in use (stations when on, Starlink when started with `--starlink`) when older than 12 hours, and the Starlink
+feed when not in use only when missing or older than 14 days (the element-age limit). Refreshes SHALL happen from `https://celestrak.org/NORAD/elements/gp.php?GROUP=<stations|starlink>&FORMAT=csv` before curses
 starts, by running `curl` without a shell into a unique temporary file, unless an attempt for that feed was made
 in the last 2 hours. The download SHALL replace the feed only on HTTP 200 with at least one valid row and at least
 half the previous row count. HTTP 403 SHALL be reported as "CelesTrak: not updated yet" and leave the cache as is.
