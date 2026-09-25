@@ -213,6 +213,11 @@ Usage: astroterm [OPTION]...
 
 Options only set the starting state: every display option can be toggled live (see [Keys](#keys)).
 
+Without `--latitude`/`--longitude`/`--city`, astroterm asks your system where you are instead of showing the sky
+over 0°, 0°. On macOS that is Location Services through
+[CoreLocationCLI](https://github.com/fulldecent/corelocationcli) (`brew install corelocationcli`, then allow it
+once when macOS asks). The last position found is remembered, so it still works offline at a dark site.
+
 ### Shell Completions
 
 To enable Tab completions in Bash, add the following line to your `~/.bashrc`:
@@ -328,7 +333,7 @@ away from the time you are looking at are not drawn, because they would put sate
 Night vision draws only red on black, but astroterm cannot dim what it does not draw. Before you go out:
 
 1. Run astroterm once while you still have a connection, and press <kbd>x</kbd> once, so the ISS and Starlink data is cached.
-2. Set your location: `astroterm -i Stockholm` or `-a <latitude> -o <longitude>`.
+2. Check the location in the first message, or set it: `astroterm -i Stockholm` or `-a <latitude> -o <longitude>`.
 3. Turn the screen brightness all the way down and switch off the keyboard backlight.
 4. Make the terminal full screen and hide anything bright around it (for tmux: `tmux set status off`).
 5. For red everywhere, use your system's color filter (macOS: Accessibility › Display › Color Filters › Color Tint).

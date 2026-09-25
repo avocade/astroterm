@@ -34,12 +34,13 @@ struct Conf
     bool grid;
     bool constell;
     bool metadata;
-    bool night;         // Red night-vision rendering
-    bool stations;      // ISS and Tiangong
-    bool starlink;      // Starlink overlay (sunlit satellites)
-    bool starlink_dark; // ... also those in Earth's shadow
-    bool vectors;       // Motion vectors
-    bool offline;       // Never touch the network
+    bool night;          // Red night-vision rendering
+    bool stations;       // ISS and Tiangong
+    bool starlink;       // Starlink overlay (sunlit satellites)
+    bool starlink_dark;  // ... also those in Earth's shadow
+    bool vectors;        // Motion vectors
+    bool offline;        // Never touch the network
+    bool location_given; // -a, -o or -i on the command line
 };
 
 // All information pertinent to rendering a celestial body

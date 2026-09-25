@@ -11,6 +11,7 @@ test_files += [
     files('ui_test.c'),
     files('satellite_test.c'),
     files('feed_test.c'),
+    files('geolocate_test.c'),
 ]
 
 test_include_dirs += [

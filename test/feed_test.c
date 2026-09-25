@@ -413,6 +413,27 @@ void test_starlink_offline_never_asks(void)
     TEST_ASSERT_EQUAL_INT(0, curl_calls());
 }
 
+void test_abandoned_temp_files_removed(void)
+{
+    char dir[400], old_tmp[500], new_tmp[500], other[500];
+    TEST_ASSERT_TRUE(feed_cache_dir(dir, sizeof(dir)));
+    snprintf(old_tmp, sizeof(old_tmp), "%s/stations.csv.AbC123", dir);
+    snprintf(new_tmp, sizeof(new_tmp), "%s/starlink.csv.XyZ789", dir);
+    snprintf(other, sizeof(other), "%s/notes.csv.AbC123", dir);
+    fclose(fopen(old_tmp, "w"));
+    fclose(fopen(new_tmp, "w"));
+    fclose(fopen(other, "w"));
+    age_file("stations.csv.AbC123", 1.0);
+    age_file("notes.csv.AbC123", 1.0);
+
+    double max_age[NUM_FEEDS] = {FEED_SKIP, FEED_SKIP};
+    char msg[128];
+    feed_refresh(max_age, msg, sizeof(msg));
+    TEST_ASSERT_EQUAL_INT(-1, access(old_tmp, F_OK)); // Abandoned: removed
+    TEST_ASSERT_EQUAL_INT(0, access(new_tmp, F_OK));  // Maybe in use: kept
+    TEST_ASSERT_EQUAL_INT(0, access(other, F_OK));    // Not ours: kept
+}
+
 void test_curl_missing(void)
 {
     setenv("PATH", "/nonexistent", 1);
@@ -457,6 +478,7 @@ int main(void)
     RUN_TEST(test_starlink_old_cache_asks_and_no_keeps_it);
     RUN_TEST(test_starlink_no_cache_asks_then_downloads);
     RUN_TEST(test_starlink_offline_never_asks);
+    RUN_TEST(test_abandoned_temp_files_removed);
     RUN_TEST(test_curl_missing);
     RUN_TEST(test_curl_args_are_hardened);
 

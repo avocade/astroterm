@@ -4,6 +4,7 @@
 #include "core_render.h"
 #include "data/keplerian_elements.h"
 #include "feed.h"
+#include "geolocate.h"
 #include "macros.h"
 #include "omm.h"
 #include "parse_BSC5.h"
@@ -177,6 +178,20 @@ int main(int argc, char *argv[])
 
     // Parse command line args and convert to internal representations
     parse_options(argc, argv, &config);
+
+    // No location given: ask the system (or recall the last fix) rather than
+    // showing the sky over 0°, 0°
+    char location_message[128] = "";
+    if (!config.location_given)
+    {
+        struct GeoFix fix;
+        if (geolocate(&fix))
+        {
+            config.latitude = fix.latitude;
+            config.longitude = fix.longitude;
+            geolocate_describe(&fix, location_message, sizeof(location_message));
+        }
+    }
     convert_options(&config);
 
     // Time for each frame in microseconds
@@ -269,25 +284,30 @@ int main(int argc, char *argv[])
 
     struct UiState ui = {0};
     double data_age = feed_age_hours(FEED_STATIONS);
+    double now_mono = clock_monotonic_s();
     if (data_message[0] != '\0')
     {
-        ui_toast(&ui, clock_monotonic_s(), "%s", data_message);
+        ui_toast(&ui, now_mono, "%s", data_message);
+    }
+    else if (location_message[0] != '\0')
+    {
+        ui_toast(&ui, now_mono, "%s · ? for keys", location_message);
     }
     else if (config.stations && stations.count == 0)
     {
-        ui_toast(&ui, clock_monotonic_s(), "No satellite data yet: run once online");
+        ui_toast(&ui, now_mono, "No satellite data yet: run once online");
     }
     else if (config.stations && data_age > 48.0)
     {
-        ui_toast(&ui, clock_monotonic_s(), "Satellite data is %.0f days old", data_age / 24.0);
+        ui_toast(&ui, now_mono, "Satellite data is %.0f days old", data_age / 24.0);
     }
-    else if (config.latitude == 0.0 && config.longitude == 0.0)
+    else if (!config.location_given)
     {
-        ui_toast(&ui, clock_monotonic_s(), "Location 0°, 0°: use -i <city> or -a/-o");
+        ui_toast(&ui, now_mono, "Location unknown: use -i <city> or -a/-o");
     }
     else
     {
-        ui_toast(&ui, clock_monotonic_s(), "? for keys");
+        ui_toast(&ui, now_mono, "? for keys");
     }
 
     // Window backgrounds follow night vision (applied when it changes)
@@ -619,6 +639,7 @@ void parse_options(int argc, char *argv[], struct Conf *config)
     if (latitude_arg->count > 0)
     {
         config->latitude = latitude_arg->dval[0];
+        config->location_given = true;
         if (config->latitude < -90 || config->latitude > 90)
         {
             fprintf(stderr, "ERROR: Latitude out of range [-90°, 90°]\n");
@@ -629,6 +650,7 @@ void parse_options(int argc, char *argv[], struct Conf *config)
     if (longitude_arg->count > 0)
     {
         config->longitude = longitude_arg->dval[0];
+        config->location_given = true;
         if (config->longitude < -180 || config->longitude > 180)
         {
             fprintf(stderr, "ERROR: Longitude out of range [-180°, 180°]\n");
@@ -733,6 +755,7 @@ void parse_options(int argc, char *argv[], struct Conf *config)
         }
 
         config->latitude = city->latitude;
+        config->location_given = true;
         config->longitude = city->longitude;
         free_city(city);
     }

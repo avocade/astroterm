@@ -11,6 +11,7 @@
 #ifdef _WIN32
 #include <direct.h>
 #else
+#include <dirent.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <spawn.h>
@@ -381,6 +382,43 @@ static bool make_temp(enum FeedId id, char *tmp, size_t len)
     return true;
 }
 
+/* Remove temporary files a killed download left behind (their random suffix
+ * makes them safe to identify); only ones old enough to be abandoned
+ */
+static void remove_stale_temp_files(void)
+{
+    char dir[PATH_LEN];
+    if (!feed_cache_dir(dir, sizeof(dir)))
+    {
+        return;
+    }
+    DIR *d = opendir(dir);
+    if (d == NULL)
+    {
+        return;
+    }
+    struct dirent *entry;
+    while ((entry = readdir(d)) != NULL)
+    {
+        for (int id = 0; id < NUM_FEEDS; ++id)
+        {
+            char prefix[64];
+            snprintf(prefix, sizeof(prefix), "%s.csv.", feed_names[id]);
+            size_t n = strlen(prefix);
+            if (strncmp(entry->d_name, prefix, n) == 0 && strlen(entry->d_name) == n + 6)
+            {
+                char path[PATH_LEN * 2];
+                snprintf(path, sizeof(path), "%s/%s", dir, entry->d_name);
+                if (file_age_hours(path) > 10.0 / 60.0)
+                {
+                    unlink(path);
+                }
+            }
+        }
+    }
+    closedir(d);
+}
+
 static enum FetchResult refresh_one(enum FeedId id, double max_age_hours)
 {
     double age = feed_age_hours(id);
@@ -432,6 +470,7 @@ static const char *problem_text(enum FetchResult result)
 void feed_refresh(const double max_age_hours[NUM_FEEDS], char *message, size_t len)
 {
     message[0] = '\0';
+    remove_stale_temp_files();
     for (int id = 0; id < NUM_FEEDS; ++id)
     {
         enum FetchResult result = refresh_one((enum FeedId)id, max_age_hours[id]);
