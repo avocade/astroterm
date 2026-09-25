@@ -10,6 +10,12 @@
 
 void draw_line_ASCII(WINDOW *win, int ya, int xa, int yb, int xb)
 {
+    // A zero-length segment has no direction (and would divide 0 by 0)
+    if (ya == yb && xa == xb)
+    {
+        return;
+    }
+
     // The logic here is not particularly elegant or efficient
 
     int dy = yb - ya;
@@ -121,6 +127,12 @@ void draw_line_ASCII(WINDOW *win, int ya, int xa, int yb, int xb)
 
 void draw_line_smooth(WINDOW *win, int ya, int xa, int yb, int xb)
 {
+    // A zero-length segment has no direction (and would divide 0 by 0)
+    if (ya == yb && xa == xb)
+    {
+        return;
+    }
+
     // The logic here is not particularly elegant or efficient
 
     int dy = yb - ya;
@@ -218,6 +230,12 @@ void draw_line_smooth(WINDOW *win, int ya, int xa, int yb, int xb)
 
 void draw_line_dotted(WINDOW *win, int ya, int xa, int yb, int xb)
 {
+    // A zero-length segment has no direction (and would divide 0 by 0)
+    if (ya == yb && xa == xb)
+    {
+        return;
+    }
+
     // The logic here is not particularly elegant or efficient
 
     int dy = yb - ya;
