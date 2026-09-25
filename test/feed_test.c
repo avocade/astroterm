@@ -62,6 +62,14 @@ static void age_file(const char *name, double hours)
     utime(path, &t);
 }
 
+/* Both feeds in use (12 h cadence)
+ */
+static void refresh_in_use(char *msg, size_t len)
+{
+    double max_age[NUM_FEEDS] = {FEED_MAX_AGE_HOURS, FEED_MAX_AGE_HOURS};
+    feed_refresh(max_age, msg, len);
+}
+
 void setUp(void)
 {
     snprintf(root, sizeof(root), "/tmp/astroterm_feed_test_XXXXXX");
@@ -127,7 +135,7 @@ void test_relative_xdg_is_ignored(void)
 void test_first_run_downloads_both_feeds(void)
 {
     char msg[128];
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     TEST_ASSERT_EQUAL_STRING("", msg);
     TEST_ASSERT_EQUAL_INT(2, curl_calls());
     TEST_ASSERT_TRUE(feed_age_hours(FEED_STATIONS) >= 0.0);
@@ -143,35 +151,35 @@ void test_first_run_downloads_both_feeds(void)
 void test_fresh_cache_is_not_refetched(void)
 {
     char msg[128];
-    feed_refresh_all(msg, sizeof(msg));
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     TEST_ASSERT_EQUAL_INT(2, curl_calls());
 }
 
 void test_retry_waits_two_hours(void)
 {
     char msg[128];
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
 
     // Stale data but a recent attempt: CelesTrak would answer 403
     age_file("stations.csv", 13.0);
     age_file("starlink.csv", 13.0);
     age_file("stations.attempt", 1.0);
     age_file("starlink.attempt", 1.0);
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     TEST_ASSERT_EQUAL_INT(2, curl_calls());
 
     // Once the attempt is old enough, try again
     age_file("stations.attempt", 3.0);
     age_file("starlink.attempt", 3.0);
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     TEST_ASSERT_EQUAL_INT(4, curl_calls());
 }
 
 void test_rate_limited_keeps_cache(void)
 {
     char msg[128];
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     age_file("stations.csv", 13.0);
     age_file("stations.attempt", 3.0);
     age_file("starlink.csv", 13.0);
@@ -179,7 +187,7 @@ void test_rate_limited_keeps_cache(void)
 
     serve(0);
     setenv("FAKE_STATUS", "403", 1);
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     TEST_ASSERT_NOT_NULL(strstr(msg, "not updated yet"));
 
     size_t len;
@@ -192,12 +200,12 @@ void test_rate_limited_keeps_cache(void)
 void test_truncated_download_rejected(void)
 {
     char msg[128];
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     age_file("starlink.csv", 13.0);
     age_file("starlink.attempt", 3.0);
 
     serve(3); // Fewer than half of the 10 rows we have
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     TEST_ASSERT_NOT_NULL(strstr(msg, "incomplete"));
 
     size_t len;
@@ -211,7 +219,7 @@ void test_network_failure_stops_early(void)
 {
     setenv("FAKE_EXIT", "6", 1); // Could not resolve host
     char msg[128];
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     TEST_ASSERT_NOT_NULL(strstr(msg, "no network"));
     TEST_ASSERT_EQUAL_INT(1, curl_calls()); // Did not also try the second feed
 }
@@ -222,27 +230,59 @@ void test_offline_failure_does_not_block_retry(void)
     // about, and reconnecting must allow an immediate retry
     setenv("FAKE_EXIT", "6", 1);
     char msg[128];
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     TEST_ASSERT_EQUAL_INT(1, curl_calls());
 
     unsetenv("FAKE_EXIT");
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     TEST_ASSERT_EQUAL_STRING("", msg);
     TEST_ASSERT_EQUAL_INT(3, curl_calls());
+}
+
+void test_starlink_kept_warm_every_two_weeks(void)
+{
+    // Stations in use, Starlink off: Starlink is fetched once, then only
+    // after two weeks
+    double max_age[NUM_FEEDS] = {FEED_MAX_AGE_HOURS, FEED_BACKGROUND_MAX_AGE_HOURS};
+    char msg[128];
+    feed_refresh(max_age, msg, sizeof(msg));
+    TEST_ASSERT_EQUAL_INT(2, curl_calls()); // First run: nothing cached yet
+
+    age_file("stations.csv", 13.0);
+    age_file("stations.attempt", 3.0);
+    age_file("starlink.csv", 13.0 * 24.0);
+    age_file("starlink.attempt", 3.0);
+    feed_refresh(max_age, msg, sizeof(msg));
+    TEST_ASSERT_EQUAL_INT(3, curl_calls()); // Stations only: Starlink is 13 days old
+
+    age_file("starlink.csv", 15.0 * 24.0);
+    age_file("stations.attempt", 3.0);
+    age_file("starlink.attempt", 3.0);
+    feed_refresh(max_age, msg, sizeof(msg));
+    TEST_ASSERT_EQUAL_INT(4, curl_calls()); // Starlink now past two weeks
+}
+
+void test_skipped_feed_is_never_fetched(void)
+{
+    double max_age[NUM_FEEDS] = {FEED_MAX_AGE_HOURS, FEED_SKIP};
+    char msg[128];
+    feed_refresh(max_age, msg, sizeof(msg));
+    TEST_ASSERT_EQUAL_INT(1, curl_calls());
+    TEST_ASSERT_TRUE(feed_age_hours(FEED_STARLINK) < 0.0);
 }
 
 void test_curl_missing(void)
 {
     setenv("PATH", "/nonexistent", 1);
     char msg[128];
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     TEST_ASSERT_NOT_NULL(strstr(msg, "curl not found"));
 }
 
 void test_curl_args_are_hardened(void)
 {
     char msg[128];
-    feed_refresh_all(msg, sizeof(msg));
+    refresh_in_use(msg, sizeof(msg));
     FILE *f = fopen(log_path, "r");
     char line[1024];
     TEST_ASSERT_NOT_NULL(fgets(line, sizeof(line), f));
@@ -267,6 +307,8 @@ int main(void)
     RUN_TEST(test_truncated_download_rejected);
     RUN_TEST(test_network_failure_stops_early);
     RUN_TEST(test_offline_failure_does_not_block_retry);
+    RUN_TEST(test_starlink_kept_warm_every_two_weeks);
+    RUN_TEST(test_skipped_feed_is_never_fetched);
     RUN_TEST(test_curl_missing);
     RUN_TEST(test_curl_args_are_hardened);
 

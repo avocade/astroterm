@@ -242,12 +242,24 @@ int main(int argc, char *argv[])
     char data_message[128] = "";
     if ((config.stations || config.starlink) && !config.offline)
     {
-        // Both feeds, so the cache is warm before you leave signal behind
-        feed_refresh_all(data_message, sizeof(data_message));
+        // Feeds in use stay fresh; Starlink is otherwise only kept warm (so
+        // 'x' works where there is no signal), refreshed every two weeks
+        double max_age[NUM_FEEDS];
+        max_age[FEED_STATIONS] = config.stations ? FEED_MAX_AGE_HOURS : FEED_SKIP;
+        max_age[FEED_STARLINK] = config.starlink ? FEED_MAX_AGE_HOURS : FEED_BACKGROUND_MAX_AGE_HOURS;
+        feed_refresh(max_age, data_message, sizeof(data_message));
     }
-    struct SatCatalog stations, starlink;
+    struct SatCatalog stations;
     load_catalog(FEED_STATIONS, station_catnrs, 2, &stations);
-    load_catalog(FEED_STARLINK, NULL, 0, &starlink);
+
+    // Starlink (~11k satellites) is loaded only once it is wanted
+    struct SatCatalog starlink = {0};
+    bool starlink_loaded = false;
+    if (config.starlink)
+    {
+        load_catalog(FEED_STARLINK, NULL, 0, &starlink);
+        starlink_loaded = true;
+    }
 
     // Starlink is propagated at most this often (wall clock), at any speed
     const double starlink_period = 0.25;
@@ -383,7 +395,13 @@ int main(int argc, char *argv[])
             }
             if (starlink_toast)
             {
-                ui_toast(&ui, mono_now, "Starlink: %d sunlit of %d above the horizon", starlink_sunlit, starlink_above);
+                double age_days = feed_age_hours(FEED_STARLINK) / 24.0;
+                char age[32] = "";
+                if (age_days >= 2.0)
+                {
+                    snprintf(age, sizeof(age), " (data %.0f days old)", age_days);
+                }
+                ui_toast(&ui, mono_now, "Starlink: %d sunlit of %d above the horizon%s", starlink_sunlit, starlink_above, age);
                 starlink_toast = false;
             }
         }
@@ -453,7 +471,6 @@ int main(int argc, char *argv[])
                 .mono = clock_monotonic_s(),
                 .has_colors = has_colors(),
                 .stations_count = stations.count,
-                .starlink_count = starlink.count,
             };
             enum UiAction action = ui_handle_key(ch, &config, &ui, &sim_clock, &ctx);
             if (action == UI_QUIT)
@@ -462,9 +479,22 @@ int main(int argc, char *argv[])
             }
             else if (action == UI_STARLINK)
             {
-                // Update now and report what is up
-                starlink_updated = -1.0e9;
-                starlink_toast = true;
+                if (!starlink_loaded)
+                {
+                    load_catalog(FEED_STARLINK, NULL, 0, &starlink);
+                    starlink_loaded = true;
+                }
+                if (starlink.count == 0)
+                {
+                    config.starlink = false;
+                    ui_toast(&ui, clock_monotonic_s(), "Starlink: no data (run once online)");
+                }
+                else
+                {
+                    // Update now and report what is up
+                    starlink_updated = -1.0e9;
+                    starlink_toast = true;
+                }
             }
             else if (action == UI_SATELLITES)
             {

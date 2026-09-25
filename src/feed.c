@@ -306,7 +306,7 @@ static void touch(const char *path)
     }
 }
 
-static enum FetchResult refresh_one(enum FeedId id)
+static enum FetchResult refresh_one(enum FeedId id, double max_age_hours)
 {
     char path[PATH_LEN], marker[PATH_LEN], tmp[PATH_LEN];
     if (!feed_file(id, ".csv", path, sizeof(path)) || !feed_file(id, ".attempt", marker, sizeof(marker)) ||
@@ -317,7 +317,8 @@ static enum FetchResult refresh_one(enum FeedId id)
 
     double age = file_age_hours(path);
     double since_attempt = file_age_hours(marker);
-    if ((age >= 0.0 && age < FEED_MAX_AGE_HOURS) || (since_attempt >= 0.0 && since_attempt < FEED_RETRY_HOURS))
+    if (max_age_hours < 0.0 || (age >= 0.0 && age < max_age_hours) ||
+        (since_attempt >= 0.0 && since_attempt < FEED_RETRY_HOURS))
     {
         return FETCH_OK; // Fresh enough, or asked recently
     }
@@ -355,12 +356,12 @@ static enum FetchResult refresh_one(enum FeedId id)
     return result;
 }
 
-void feed_refresh_all(char *message, size_t len)
+void feed_refresh(const double max_age_hours[NUM_FEEDS], char *message, size_t len)
 {
     message[0] = '\0';
     for (int id = 0; id < NUM_FEEDS; ++id)
     {
-        enum FetchResult result = refresh_one((enum FeedId)id);
+        enum FetchResult result = refresh_one((enum FeedId)id, max_age_hours[id]);
         const char *problem = NULL;
         switch (result)
         {
@@ -395,8 +396,9 @@ void feed_refresh_all(char *message, size_t len)
 
 #else // _WIN32
 
-void feed_refresh_all(char *message, size_t len)
+void feed_refresh(const double max_age_hours[NUM_FEEDS], char *message, size_t len)
 {
+    (void)max_age_hours;
     snprintf(message, len, "Satellite downloads are not supported on Windows");
 }
 

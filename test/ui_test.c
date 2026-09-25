@@ -166,15 +166,11 @@ void test_stations_toggle(void)
 
 void test_starlink_toggle(void)
 {
-    ctx.starlink_count = 10000;
+    // Turning it on asks the caller to load (lazily) and update the layer
     TEST_ASSERT_EQUAL_INT(UI_STARLINK, press('x'));
     TEST_ASSERT_TRUE(config.starlink);
     TEST_ASSERT_EQUAL_INT(UI_NONE, press('x'));
     TEST_ASSERT_FALSE(config.starlink);
-
-    ctx.starlink_count = 0;
-    TEST_ASSERT_EQUAL_INT(UI_NONE, press('x'));
-    TEST_ASSERT_EQUAL_STRING("Starlink: no data (run once online)", ui_current_toast(&ui, ctx.mono));
 
     press('X');
     TEST_ASSERT_TRUE(config.starlink_dark);

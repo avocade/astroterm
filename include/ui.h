@@ -23,7 +23,7 @@ enum UiAction
 {
     UI_NONE = 0,
     UI_QUIT,
-    UI_STARLINK,   // Starlink turned on: update now and report counts
+    UI_STARLINK,   // Starlink turned on: load if needed, update now, report counts
     UI_SATELLITES, // Satellite state needs recomputing now (e.g. vectors on)
 };
 
@@ -42,7 +42,6 @@ struct UiContext
     double mono; // Monotonic seconds (for toasts)
     bool has_colors;
     int stations_count; // Stations with usable data
-    int starlink_count; // Starlink satellites with usable data
 };
 
 /* Apply one keypress. Returns the side effect the caller must perform

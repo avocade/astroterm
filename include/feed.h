@@ -2,9 +2,11 @@
  *
  * Feeds are refreshed before the UI starts, by running `curl` (no shell, no
  * link dependency) into a unique temporary file that replaces the cache only
- * after it validates. Politeness rules: a feed is fetched only when older than
- * FEED_MAX_AGE_HOURS, and never more often than FEED_RETRY_HOURS, because
- * CelesTrak answers a repeat download of unchanged data with HTTP 403.
+ * after it validates. A feed in use is refreshed when older than
+ * FEED_MAX_AGE_HOURS; a feed that is merely kept warm for later (Starlink when
+ * its layer is off) only when older than FEED_BACKGROUND_MAX_AGE_HOURS. Never
+ * more often than FEED_RETRY_HOURS, because CelesTrak answers a repeat download
+ * of unchanged data with HTTP 403.
  */
 
 #ifndef FEED_H
@@ -14,6 +16,8 @@
 #include <stddef.h>
 
 #define FEED_MAX_AGE_HOURS 12.0
+#define FEED_BACKGROUND_MAX_AGE_HOURS (14.0 * 24.0) // Matches the 14-day element-age limit
+#define FEED_SKIP (-1.0)
 #define FEED_RETRY_HOURS 2.0
 
 enum FeedId
@@ -36,10 +40,10 @@ double feed_age_hours(enum FeedId id);
  */
 char *feed_read(enum FeedId id, size_t *len_out);
 
-/* Refresh every stale feed (blocking; call before curses starts). Progress
- * goes to stderr; a one-line summary for the UI goes to `message` (empty when
- * there is nothing to report)
+/* Refresh each feed older than its maximum age in hours (FEED_SKIP: never).
+ * Blocking; call before curses starts. Progress goes to stderr; a one-line
+ * summary for the UI goes to `message` (empty when there is nothing to report)
  */
-void feed_refresh_all(char *message, size_t len);
+void feed_refresh(const double max_age_hours[NUM_FEEDS], char *message, size_t len);
 
 #endif // FEED_H

@@ -303,8 +303,10 @@ Starlink satellites that are in sunlight, the ones you could actually see, appea
 stars. Press <kbd>X</kbd> to also see the ones in Earth's shadow.
 
 Positions are computed with SGP4 from [CelesTrak](https://celestrak.org) orbital elements. astroterm keeps them in
-`$XDG_CACHE_HOME/astroterm` (usually `~/.cache/astroterm`) and refreshes them with `curl` when you start it,
-if the data is older than 12 hours. It asks at most once every two hours, which is how often CelesTrak updates.
+`$XDG_CACHE_HOME/astroterm` (usually `~/.cache/astroterm`) and refreshes them with `curl` when you start it: the
+space stations when older than 12 hours, Starlink when older than 12 hours if you start with `--starlink`, and
+otherwise only every two weeks, so <kbd>x</kbd> still works where there is no signal. It asks at most once every
+two hours, which is how often CelesTrak updates.
 Nothing is sent except those requests, and `--offline` turns off the network entirely. Elements more than 14 days
 away from the time you are looking at are not drawn, because they would put satellites in the wrong place.
 

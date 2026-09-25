@@ -218,11 +218,6 @@ enum UiAction ui_handle_key(int ch, struct Conf *config, struct UiState *ui, str
             ui_toast(ui, ctx->mono, "Starlink: off");
             return UI_NONE;
         }
-        if (ctx->starlink_count == 0)
-        {
-            ui_toast(ui, ctx->mono, "Starlink: no data (run once online)");
-            return UI_NONE;
-        }
         ui_toast(ui, ctx->mono, "Starlink: on");
         return UI_STARLINK;
 
